@@ -22,8 +22,4 @@ rm:
 	sudo rmmod dis_ktest.ko
 	dmesg
 
-test:
-	sudo dmesg -C
-	sudo insmod dis_ktest.ko
-	sudo rmmod dis_ktest.ko
-	dmesg
+test: ins rm
