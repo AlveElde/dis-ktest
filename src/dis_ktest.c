@@ -16,45 +16,49 @@ MODULE_LICENSE("GPL");
 #define STATUS_COMPLETE "Completed.\n"
 #define STATUS_FAIL     "Failed.\n"
 
+
+void qp_event_handler(struct ib_event *ibevent, void *qp_context)
+{
+    return;
+}
+
+static int create_qp(struct qp_ctx *qp)
+{
+
+    return 0;
+}
+
 void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 {
-
+    return;
 }
 
-void cq_event_handler(struct ib_event *ibevent, void *cq_context)
+void cq_cq_event_handler(struct ib_event *ibevent, void *cq_context)
 {
-
+    return;
 }
 
-static int create_cq(struct test_context *ctx)
+static int create_cq(struct cq_ctx *cq)
 {
     pr_devel(STATUS_START);
-    ctx->comp_handler = cq_comp_handler;
-    ctx->event_handler = NULL;
-    ctx->cq_context = NULL;
-    ctx->cq_attr.cqe = 10; // Length of queue
-    ctx->cq_attr.comp_vector = 0;
-    ctx->cq_attr.flags = 0;
-    ctx->ibcq = ib_create_cq(ctx->ibdev,
-                                ctx->comp_handler,
-                                ctx->event_handler,
-                                ctx->cq_context,
-                                &ctx->cq_attr);
-    if (!ctx->ibcq) {
+    cq->ibcq = ib_create_cq(cq->ibdev,
+                                cq->comp_handler,
+                                cq->event_handler,
+                                cq->context,
+                                &cq->attr);
+    if (!cq->ibcq) {
         pr_devel(STATUS_FAIL);
-            return -42;
+        return -42;
     }
     pr_devel(STATUS_COMPLETE);
     return 0;
-
 }
 
-static int alloc_pd(struct test_context *ctx)
+static int alloc_pd(struct pd_ctx *pd)
 {
     pr_devel(STATUS_START);
-    ctx->pd_flags = 0;
-    ctx->ibpd = ib_alloc_pd(ctx->ibdev, ctx->pd_flags);
-    if (!ctx->ibpd) {
+    pd->ibpd = ib_alloc_pd(pd->ibdev, pd->flags);
+    if (!pd->ibpd) {
         pr_devel(STATUS_FAIL);
 		return -42;
     }
@@ -62,22 +66,35 @@ static int alloc_pd(struct test_context *ctx)
     return 0;
 }
 
-static int perform_test(struct test_context *ctx)
+static int perform_test(struct ib_device *ibdev)
 {
     int ret;
+    struct pd_ctx pd;
+    struct cq_ctx cq;
+    struct qp_ctx qp1, qp2;
     pr_devel(STATUS_START);
 
-    ret = alloc_pd(ctx);
+    /* Create Protection Domain */
+    pd.ibdev = ibdev;
+    pd.flags = 0;
+    ret = alloc_pd(&pd);
     if (ret) {
         goto alloc_pd_err;
     }
 
-    // ret = create_cq(ctx);
-    // if (ret) {
-    //     goto create_cq_err;
-    // }
+    /* Create a Completion Queue */
+    cq.ibdev = ibdev;
+    cq.comp_handler = cq_comp_handler,
+    cq.event_handler = NULL,
+    cq.context = NULL,
+    cq.attr.cqe = 10,
+    cq.attr.comp_vector = 0,
+    cq.attr.flags = 0,
+    ret = create_cq(&cq);
+    if (ret) {
+        goto create_cq_err;
+    }
 
-    // ibqp = ib_create_qp(ibpd, &init_attr);
 
     // ib_query_qp(ibqp, &attr, IB_QP_CAP, &init_attr);
 
@@ -86,11 +103,11 @@ static int perform_test(struct test_context *ctx)
 
     // }
 
-    //ib_destroy_cq(ctx->ibcq);
+    ib_destroy_cq(cq.ibcq);
     pr_devel("ib_destroy_cq " STATUS_COMPLETE);
 
 create_cq_err:
-    ib_dealloc_pd(ctx->ibpd);
+    ib_dealloc_pd(pd.ibpd);
     pr_devel("ib_dealloc_pd " STATUS_COMPLETE);
 
 alloc_pd_err:
@@ -101,20 +118,15 @@ alloc_pd_err:
 static void dis_ktest_add(struct ib_device *ibdev)
 {
     int ret;
-    struct test_context ctx;
     pr_devel(STATUS_START);
 
-    ctx.ibdev = ibdev;
-    ret = perform_test(&ctx);
+    ret = perform_test(ibdev);
 
     pr_devel(STATUS_COMPLETE);
 }
 
 static void dis_ktest_remove(struct ib_device *ib_device, void *client_data)
 {
-    pr_devel(STATUS_START);
-
-
     pr_devel(STATUS_COMPLETE);
 }
 
@@ -135,7 +147,6 @@ static int __init dis_ktest_init(void)
         pr_info(STATUS_FAIL);
 		return -42;
     }
-
 
     pr_info(STATUS_COMPLETE);
     return 0;
