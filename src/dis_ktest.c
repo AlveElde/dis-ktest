@@ -1,3 +1,6 @@
+#define DEBUG
+#define pr_fmt(fmt) KBUILD_MODNAME ": fn: %s, ln: %d: " fmt, __func__, __LINE__
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -9,70 +12,60 @@ MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
 MODULE_LICENSE("GPL");
 
-struct test_context {
-    // Device
-    struct ib_device *ibdev;
-    // PD
-    int pd_flags;
-    struct ib_pd *ibpd;
-
-    // CQ
-    void (*comp_handler)(struct ib_cq *ibcq, void *cq_context);
-    void (*event_handler)(struct ib_event *, void *);
-    void *cq_context;
-    struct ib_cq_init_attr *cq_attr;
-    struct ib_cq *ibcq;
-
-    // QP
-    struct ib_qp_attr attr;
-    struct ib_qp_init_attr init_attr;
-    struct ib_qp *ibqp;
-};
-
+#define STATUS_START    "Started.\n"
+#define STATUS_COMPLETE "Completed.\n"
+#define STATUS_FAIL     "Failed.\n"
 
 void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 {
 
 }
 
+void cq_event_handler(struct ib_event *ibevent, void *cq_context)
+{
+
+}
+
 static int create_cq(struct test_context *ctx)
 {
+    pr_devel(STATUS_START);
     ctx->comp_handler = cq_comp_handler;
     ctx->event_handler = NULL;
     ctx->cq_context = NULL;
-    ctx->cq_attr = 0;
-    ctx->ibcq = ib_create_cq(ctx->ibdev, 
-                                ctx->comp_handler, 
-                                ctx->event_handler, 
+    ctx->cq_attr.cqe = 10; // Length of queue
+    ctx->cq_attr.comp_vector = 0;
+    ctx->cq_attr.flags = 0;
+    ctx->ibcq = ib_create_cq(ctx->ibdev,
+                                ctx->comp_handler,
+                                ctx->event_handler,
                                 ctx->cq_context,
-                                ctx->cq_attr);
+                                &ctx->cq_attr);
     if (!ctx->ibcq) {
-        printk(KERN_ERR "create_cq failed!.\n");
+        pr_devel(STATUS_FAIL);
             return -42;
     }
-    printk(KERN_INFO "create_cq complete.\n");
+    pr_devel(STATUS_COMPLETE);
     return 0;
 
 }
 
 static int alloc_pd(struct test_context *ctx)
 {
-    printk(KERN_INFO "alloc_pd start.\n");
+    pr_devel(STATUS_START);
     ctx->pd_flags = 0;
     ctx->ibpd = ib_alloc_pd(ctx->ibdev, ctx->pd_flags);
     if (!ctx->ibpd) {
-        printk(KERN_ERR "alloc_pd failed!.\n");
+        pr_devel(STATUS_FAIL);
 		return -42;
     }
-    printk(KERN_INFO "alloc_pd complete.\n");
+    pr_devel(STATUS_COMPLETE);
     return 0;
 }
-
 
 static int perform_test(struct test_context *ctx)
 {
     int ret;
-    printk(KERN_INFO "perform_test start.\n");
+    pr_devel(STATUS_START);
 
     ret = alloc_pd(ctx);
     if (ret) {
@@ -93,34 +86,36 @@ static int perform_test(struct test_context *ctx)
 
     // }
 
+    //ib_destroy_cq(ctx->ibcq);
+    pr_devel("ib_destroy_cq " STATUS_COMPLETE);
+
 create_cq_err:
     ib_dealloc_pd(ctx->ibpd);
-    printk(KERN_ERR "ib_dealloc_pd complete.\n");
+    pr_devel("ib_dealloc_pd " STATUS_COMPLETE);
 
 alloc_pd_err:
-    printk(KERN_INFO "perform_test complete.\n");
+    pr_devel(STATUS_COMPLETE);
     return 0;
 }
-
-
-
 
 static void dis_ktest_add(struct ib_device *ibdev)
 {
     int ret;
     struct test_context ctx;
-    printk(KERN_INFO "dis_ktest_add start.\n");
+    pr_devel(STATUS_START);
+
     ctx.ibdev = ibdev;
     ret = perform_test(&ctx);
-    printk(KERN_INFO "dis_ktest_add complete.\n");
+
+    pr_devel(STATUS_COMPLETE);
 }
 
 static void dis_ktest_remove(struct ib_device *ib_device, void *client_data)
 {
-    printk(KERN_INFO "dis_ktest_remove start.\n");
+    pr_devel(STATUS_START);
 
 
-    printk(KERN_INFO "dis_ktest_remove complete.\n");
+    pr_devel(STATUS_COMPLETE);
 }
 
 static struct ib_client disibclient = {
@@ -129,31 +124,30 @@ static struct ib_client disibclient = {
 	.remove = dis_ktest_remove,
 };
 
-
 static int __init dis_ktest_init(void)
 {
     int ret;
 
-    printk(KERN_INFO "dis_ktest_init start.\n");
+    pr_info(STATUS_START);
 
 	ret = ib_register_client(&disibclient);
 	if (ret) {
-        printk(KERN_INFO "ib_register_client failed!.\n");
+        pr_info(STATUS_FAIL);
 		return -42;
     }
 
 
-    printk(KERN_INFO "dis_ktest_init complete.\n");
+    pr_info(STATUS_COMPLETE);
     return 0;
 }
 
 static void __exit dis_ktest_exit(void)
 {
-    printk(KERN_INFO "dis_ktest_exit start.\n");
+    pr_info(STATUS_START);
 
     ib_unregister_client(&disibclient);
 
-    printk(KERN_INFO "dis_ktest_exit complete.\n");
+    pr_info(STATUS_COMPLETE);
 }
 
 module_init(dis_ktest_init);
