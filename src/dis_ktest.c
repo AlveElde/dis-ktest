@@ -24,7 +24,13 @@ void qp_event_handler(struct ib_event *ibevent, void *qp_context)
 
 static int create_qp(struct qp_ctx *qp)
 {
-
+    pr_devel(STATUS_START);
+    qp->ibqp = ib_create_qp(qp->ibpd, &qp->attr);
+    if (!qp->ibqp) {
+        pr_devel(STATUS_FAIL);
+        return -42;
+    }
+    pr_devel(STATUS_COMPLETE);
     return 0;
 }
 
@@ -71,10 +77,11 @@ static int perform_test(struct ib_device *ibdev)
     int ret;
     struct pd_ctx pd;
     struct cq_ctx cq;
-    struct qp_ctx qp1, qp2;
+    struct qp_ctx qp1;
     pr_devel(STATUS_START);
 
     /* Create Protection Domain */
+    memset(&pd, 0, sizeof(struct pd_ctx));
     pd.ibdev = ibdev;
     pd.flags = 0;
     ret = alloc_pd(&pd);
@@ -83,26 +90,47 @@ static int perform_test(struct ib_device *ibdev)
     }
 
     /* Create a Completion Queue */
-    cq.ibdev = ibdev;
-    cq.comp_handler = cq_comp_handler,
-    cq.event_handler = NULL,
-    cq.context = NULL,
-    cq.attr.cqe = 10,
+    memset(&cq, 0, sizeof(struct cq_ctx));
+    cq.ibdev            = ibdev;
+    cq.comp_handler     = cq_comp_handler,
+    cq.event_handler    = NULL,
+    cq.context          = NULL,
+
+    cq.attr.cqe         = 10,
     cq.attr.comp_vector = 0,
-    cq.attr.flags = 0,
+    cq.attr.flags       = 0,
     ret = create_cq(&cq);
     if (ret) {
         goto create_cq_err;
     }
 
+    /* Create Queue Pair 1*/
+    memset(&qp1, 0, sizeof(struct qp_ctx));
 
-    // ib_query_qp(ibqp, &attr, IB_QP_CAP, &init_attr);
+    qp1.ibpd = pd.ibpd;
 
-    // ret = ib_post_send(ibqp, ibwq, ibbadwr);
-    // if(ret) {
+    qp1.attr.qp_context     = NULL;
+    qp1.attr.send_cq        = cq.ibcq;
+    qp1.attr.recv_cq        = cq.ibcq;
+    qp1.attr.srq            = NULL;
+    qp1.attr.sq_sig_type    = IB_SIGNAL_ALL_WR;
+    qp1.attr.qp_type        = IB_QPT_RC;
+    qp1.attr.create_flags   = 0;
 
-    // }
+    qp1.attr.cap.max_send_wr        = 10;
+    qp1.attr.cap.max_recv_wr        = 10;
+	qp1.attr.cap.max_send_sge       = 1;
+	qp1.attr.cap.max_recv_sge       = 1;
+	qp1.attr.cap.max_inline_data    = 0;
+    ret = create_qp(&qp1);
+    if (ret) {
+        goto create_qp_err;
+    }
 
+    ib_destroy_qp(qp1.ibqp);
+    pr_devel("ib_destroy_qp(qp1) " STATUS_COMPLETE);
+
+create_qp_err:
     ib_destroy_cq(cq.ibcq);
     pr_devel("ib_destroy_cq " STATUS_COMPLETE);
 
