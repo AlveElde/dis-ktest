@@ -8,13 +8,42 @@
 
 #include "dis_ktest.h"
 
+#define STATUS_START    "Started.\n"
+#define STATUS_COMPLETE "Completed.\n"
+#define STATUS_FAIL     "Failed.\n"
+
 MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
 MODULE_LICENSE("GPL");
 
-#define STATUS_START    "Started.\n"
-#define STATUS_COMPLETE "Completed.\n"
-#define STATUS_FAIL     "Failed.\n"
+
+static int create_send_wr(struct send_wr_ctx *wr)
+{
+    pr_devel(STATUS_START);
+    wr->ibwr = kzalloc(sizeof(struct ib_send_wr), GFP_KERNEL);
+    if (!wr->ibwr) {
+        pr_devel(STATUS_FAIL);
+        return -42;
+    }
+    pr_devel(STATUS_COMPLETE);
+    return 0;
+}
+
+// static int alloc_mr(struct mr_ctx *mr)
+// {
+//     pr_devel(STATUS_START);
+//     mr->ibmr = ib_alloc_mr(&mr->ibpd, IB_ACCESS_REMOTE_READ |
+//                             IB_ACCESS_REMOTE_WRITE |
+//                             IB_ACCESS_LOCAL_WRITE);
+//     if (!mr->ibmr) {
+//         pr_devel(STATUS_FAIL);
+//         return -42;
+//     }
+//     pr_devel(STATUS_COMPLETE);
+//     return 0;
+// }
+
+
 
 
 void qp_event_handler(struct ib_event *ibevent, void *qp_context)
@@ -78,6 +107,8 @@ static int perform_test(struct ib_device *ibdev)
     struct pd_ctx pd;
     struct cq_ctx cq;
     struct qp_ctx qp1;
+    struct send_wr_ctx send_wr;
+
     pr_devel(STATUS_START);
 
     /* Create Protection Domain */
@@ -106,7 +137,6 @@ static int perform_test(struct ib_device *ibdev)
 
     /* Create Queue Pair 1*/
     memset(&qp1, 0, sizeof(struct qp_ctx));
-
     qp1.ibpd = pd.ibpd;
 
     qp1.attr.qp_context     = NULL;
@@ -127,16 +157,42 @@ static int perform_test(struct ib_device *ibdev)
         goto create_qp_err;
     }
 
+    /* Get DMA Memory Region */
+    // mr.ibpd = pd.ibpd;
+    // ret = alloc_mr(&mr);
+    // if (ret) {
+    //     goto get_mr_err;
+    // }
+
+    /* Create Send Work Request */ 
+    send_wr.ibqp        = qp1.ibqp;
+    send_wr.ibbadwr    = NULL;
+    ret = create_send_wr(&send_wr);
+    if (ret) {
+        goto create_wr_err;
+    }
+
+    /* Post Send Request */
+    return 0;
+
+    kfree(send_wr.ibwr);
+    pr_devel("kfree(send_wr.ibwr): " STATUS_COMPLETE);
+
+create_wr_err:
     ib_destroy_qp(qp1.ibqp);
-    pr_devel("ib_destroy_qp(qp1) " STATUS_COMPLETE);
+    pr_devel("ib_destroy_qp(qp1): " STATUS_COMPLETE);
+
+// get_mr_err:
+//     ib_destroy_qp(qp1.ibqp);
+//     pr_devel("ib_destroy_qp(qp1): " STATUS_COMPLETE);
 
 create_qp_err:
     ib_destroy_cq(cq.ibcq);
-    pr_devel("ib_destroy_cq " STATUS_COMPLETE);
+    pr_devel("ib_destroy_cq: " STATUS_COMPLETE);
 
 create_cq_err:
     ib_dealloc_pd(pd.ibpd);
-    pr_devel("ib_dealloc_pd " STATUS_COMPLETE);
+    pr_devel("ib_dealloc_pd: " STATUS_COMPLETE);
 
 alloc_pd_err:
     pr_devel(STATUS_COMPLETE);
