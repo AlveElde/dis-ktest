@@ -52,3 +52,7 @@ struct sge_ctx {
 	u32	            length;
 	u32	            lkey;
 };
+
+int test_requester(struct ib_device *ibdev);
+
+int test_responder(struct ib_device *ibdev);
