@@ -1,8 +1,13 @@
 #include <rdma/ib_verbs.h>
 
-#define TOTAL_PDS 1
-#define TOTAL_CQS 1
-#define TOTAL_QPS 1
+#define STATUS_START    "Started.\n"
+#define STATUS_COMPLETE "Completed.\n"
+#define STATUS_FAIL     "Failed.\n"
+
+#define TOTAL_PD    1
+#define TOTAL_CQ    1
+#define TOTAL_QP    1
+#define TOTAL_SGE   1
 
 struct pd_ctx {
     struct ib_pd        *ibpd;
@@ -31,13 +36,19 @@ struct qp_ctx {
 // };
 
 struct send_wr_ctx {
-    struct ib_qp        *ibqp;
     struct ib_send_wr   *ibwr;
     struct ib_send_wr   *ibbadwr;
+    struct ib_qp        *ibqp;
+    struct ib_sge       *ibsge;
+    enum ib_wr_opcode	opcode;
+    int                 num_sge;
+    int			        send_flags;
+    u64		            wr_id;
 };
 
-
-// struct ib_sge sge;
-//     
-//     struct ib_send_wr wr;
-//     struct ib_send_wr bad_wr;
+struct sge_ctx {
+    struct ib_sge   *ibsge;
+	u64	            addr;
+	u32	            length;
+	u32	            lkey;
+};

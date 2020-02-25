@@ -5,26 +5,51 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/string.h>
 
 #include "dis_ktest.h"
 
-#define STATUS_START    "Started.\n"
-#define STATUS_COMPLETE "Completed.\n"
-#define STATUS_FAIL     "Failed.\n"
+
 
 MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
 MODULE_LICENSE("GPL");
 
 
-static int create_send_wr(struct send_wr_ctx *wr)
+static int create_send_wr(struct send_wr_ctx *wr, struct sge_ctx sge[])
 {
+    int i;
     pr_devel(STATUS_START);
+
     wr->ibwr = kzalloc(sizeof(struct ib_send_wr), GFP_KERNEL);
     if (!wr->ibwr) {
         pr_devel(STATUS_FAIL);
         return -42;
     }
+
+    memset(wr->ibwr, 0, sizeof(struct ib_send_wr));
+
+    wr->ibwr->opcode        = wr->opcode;
+    wr->ibwr->num_sge       = wr->num_sge;
+    wr->ibwr->send_flags    = wr->send_flags;
+    wr->ibwr->wr_id         = wr->wr_id;
+
+    wr->ibwr->sg_list = kzalloc(sizeof(struct ib_sge)*wr->num_sge, GFP_KERNEL);
+    if (!wr->ibwr) {
+        pr_devel(STATUS_FAIL);
+        kfree(wr->ibwr);
+        return -42;
+    }
+
+    memset(wr->ibwr->sg_list, 0, sizeof(struct ib_sge)*wr->num_sge);
+
+    for(i = 0; i < wr->ibwr->num_sge; i++) {
+        sge[i].ibsge = wr->ibwr->sg_list + (sizeof(struct ib_sge) * i);
+        sge[i].ibsge->addr      = sge[i].addr;
+        sge[i].ibsge->length    = sge[i].length;
+        sge[i].ibsge->lkey      = sge[i].lkey;
+    }
+
     pr_devel(STATUS_COMPLETE);
     return 0;
 }
@@ -42,9 +67,6 @@ static int create_send_wr(struct send_wr_ctx *wr)
 //     pr_devel(STATUS_COMPLETE);
 //     return 0;
 // }
-
-
-
 
 void qp_event_handler(struct ib_event *ibevent, void *qp_context)
 {
@@ -104,9 +126,11 @@ static int alloc_pd(struct pd_ctx *pd)
 static int perform_test(struct ib_device *ibdev)
 {
     int ret;
+    char message[30] = "Hello There!";
     struct pd_ctx pd;
     struct cq_ctx cq;
     struct qp_ctx qp1;
+    struct sge_ctx sge[TOTAL_SGE];
     struct send_wr_ctx send_wr;
 
     pr_devel(STATUS_START);
@@ -164,19 +188,33 @@ static int perform_test(struct ib_device *ibdev)
     //     goto get_mr_err;
     // }
 
-    /* Create Send Work Request */ 
+    /* Define Segments To Send */
+    sge[0].addr     = (uintptr_t)message;
+    sge[0].length   = strlen(message);
+    sge[0].lkey     = 1234;
+
+    /* Create Send Work Request */
+    memset(&send_wr, 0, sizeof(struct send_wr_ctx));
     send_wr.ibqp        = qp1.ibqp;
-    send_wr.ibbadwr    = NULL;
-    ret = create_send_wr(&send_wr);
+    send_wr.ibbadwr     = NULL;
+	send_wr.opcode      = IB_WR_SEND;
+    send_wr.num_sge     = TOTAL_SGE;
+	send_wr.send_flags  = IB_SEND_SIGNALED;
+	send_wr.wr_id       = 1;
+
+    ret = create_send_wr(&send_wr, sge);
     if (ret) {
         goto create_wr_err;
     }
 
     /* Post Send Request */
-    return 0;
 
+
+
+    kfree(send_wr.ibwr->sg_list);
+    pr_devel("kfree(ibwr.sg_list): " STATUS_COMPLETE);
     kfree(send_wr.ibwr);
-    pr_devel("kfree(send_wr.ibwr): " STATUS_COMPLETE);
+    pr_devel("kfree(ibwr): " STATUS_COMPLETE);
 
 create_wr_err:
     ib_destroy_qp(qp1.ibqp);
