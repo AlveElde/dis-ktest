@@ -53,6 +53,15 @@ struct sge_ctx {
 	u32	            lkey;
 };
 
+struct requester_ctx {
+    struct ib_device    *ibdev;
+    struct pd_ctx       pd;
+    struct cq_ctx       cq;
+    struct qp_ctx       qp1;
+    struct sge_ctx      sge[TOTAL_SGE];
+    struct send_wr_ctx  send_wr;
+};
+
 int test_requester(struct ib_device *ibdev);
 
 int test_responder(struct ib_device *ibdev);

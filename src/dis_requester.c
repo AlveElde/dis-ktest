@@ -113,60 +113,55 @@ int alloc_pd(struct pd_ctx *pd)
     return 0;
 }
 
-int test_requester(struct ib_device *ibdev)
+int send_request(struct requester_ctx *ctx)
 {
     int ret;
     char message[30] = "Hello There!";
-    struct pd_ctx pd;
-    struct cq_ctx cq;
-    struct qp_ctx qp1;
-    struct sge_ctx sge[TOTAL_SGE];
-    struct send_wr_ctx send_wr;
-
+    
     pr_devel(STATUS_START);
 
     /* Create Protection Domain */
-    memset(&pd, 0, sizeof(struct pd_ctx));
-    pd.ibdev = ibdev;
-    pd.flags = 0;
-    ret = alloc_pd(&pd);
+    memset(&ctx->pd, 0, sizeof(struct pd_ctx));
+    ctx->pd.ibdev = ctx->ibdev;
+    ctx->pd.flags = 0;
+    ret = alloc_pd(&ctx->pd);
     if (ret) {
         goto alloc_pd_err;
     }
 
     /* Create a Completion Queue */
-    memset(&cq, 0, sizeof(struct cq_ctx));
-    cq.ibdev            = ibdev;
-    cq.comp_handler     = cq_comp_handler,
-    cq.event_handler    = NULL,
-    cq.context          = NULL,
+    memset(&ctx->cq, 0, sizeof(struct cq_ctx));
+    ctx->cq.ibdev               = ctx->ibdev;
+    ctx->cq.comp_handler        = cq_comp_handler,
+    ctx->cq.event_handler       = NULL,
+    ctx->cq.context             = NULL,
 
-    cq.attr.cqe         = 10,
-    cq.attr.comp_vector = 0,
-    cq.attr.flags       = 0,
-    ret = create_cq(&cq);
+    ctx->cq.attr.cqe            = 10,
+    ctx->cq.attr.comp_vector    = 0,
+    ctx->cq.attr.flags          = 0,
+    ret = create_cq(&ctx->cq);
     if (ret) {
         goto create_cq_err;
     }
 
     /* Create Queue Pair 1*/
-    memset(&qp1, 0, sizeof(struct qp_ctx));
-    qp1.ibpd = pd.ibpd;
+    memset(&ctx->qp1, 0, sizeof(struct qp_ctx));
+    ctx->qp1.ibpd = ctx->pd.ibpd;
 
-    qp1.attr.qp_context     = NULL;
-    qp1.attr.send_cq        = cq.ibcq;
-    qp1.attr.recv_cq        = cq.ibcq;
-    qp1.attr.srq            = NULL;
-    qp1.attr.sq_sig_type    = IB_SIGNAL_ALL_WR;
-    qp1.attr.qp_type        = IB_QPT_RC;
-    qp1.attr.create_flags   = 0;
+    ctx->qp1.attr.qp_context     = NULL;
+    ctx->qp1.attr.send_cq        = ctx->cq.ibcq;
+    ctx->qp1.attr.recv_cq        = ctx->cq.ibcq;
+    ctx->qp1.attr.srq            = NULL;
+    ctx->qp1.attr.sq_sig_type    = IB_SIGNAL_ALL_WR;
+    ctx->qp1.attr.qp_type        = IB_QPT_RC;
+    ctx->qp1.attr.create_flags   = 0;
 
-    qp1.attr.cap.max_send_wr        = 10;
-    qp1.attr.cap.max_recv_wr        = 10;
-	qp1.attr.cap.max_send_sge       = 1;
-	qp1.attr.cap.max_recv_sge       = 1;
-	qp1.attr.cap.max_inline_data    = 0;
-    ret = create_qp(&qp1);
+    ctx->qp1.attr.cap.max_send_wr        = 10;
+    ctx->qp1.attr.cap.max_recv_wr        = 10;
+	ctx->qp1.attr.cap.max_send_sge       = 1;
+	ctx->qp1.attr.cap.max_recv_sge       = 1;
+	ctx->qp1.attr.cap.max_inline_data    = 0;
+    ret = create_qp(&ctx->qp1);
     if (ret) {
         goto create_qp_err;
     }
@@ -179,20 +174,20 @@ int test_requester(struct ib_device *ibdev)
     // }
 
     /* Define Segments To Send */
-    sge[0].addr     = (uintptr_t)message;
-    sge[0].length   = strlen(message);
-    sge[0].lkey     = 1234;
+    ctx->sge[0].addr     = (uintptr_t)message;
+    ctx->sge[0].length   = strlen(message);
+    ctx->sge[0].lkey     = 1234;
 
     /* Create Send Work Request */
-    memset(&send_wr, 0, sizeof(struct send_wr_ctx));
-    send_wr.ibqp        = qp1.ibqp;
-    send_wr.ibbadwr     = NULL;
-	send_wr.opcode      = IB_WR_SEND;
-    send_wr.num_sge     = TOTAL_SGE;
-	send_wr.send_flags  = IB_SEND_SIGNALED;
-	send_wr.wr_id       = 1;
+    memset(&ctx->send_wr, 0, sizeof(struct send_wr_ctx));
+    ctx->send_wr.ibqp        = ctx->qp1.ibqp;
+    ctx->send_wr.ibbadwr     = NULL;
+	ctx->send_wr.opcode      = IB_WR_SEND;
+    ctx->send_wr.num_sge     = TOTAL_SGE;
+	ctx->send_wr.send_flags  = IB_SEND_SIGNALED;
+	ctx->send_wr.wr_id       = 1;
 
-    ret = create_send_wr(&send_wr, sge);
+    ret = create_send_wr(&ctx->send_wr, ctx->sge);
     if (ret) {
         goto create_wr_err;
     }
@@ -201,28 +196,41 @@ int test_requester(struct ib_device *ibdev)
 
 
 
-    kfree(send_wr.ibwr->sg_list);
+    kfree(ctx->send_wr.ibwr->sg_list);
     pr_devel("kfree(ibwr.sg_list): " STATUS_COMPLETE);
-    kfree(send_wr.ibwr);
+    kfree(ctx->send_wr.ibwr);
     pr_devel("kfree(ibwr): " STATUS_COMPLETE);
 
 create_wr_err:
-    ib_destroy_qp(qp1.ibqp);
-    pr_devel("ib_destroy_qp(qp1): " STATUS_COMPLETE);
+    ib_destroy_qp(ctx->qp1.ibqp);
+    pr_devel("ib_destroy_qp(ctx->qp1): " STATUS_COMPLETE);
 
 // get_mr_err:
-//     ib_destroy_qp(qp1.ibqp);
-//     pr_devel("ib_destroy_qp(qp1): " STATUS_COMPLETE);
+//     ib_destroy_qp(ctx->qp1.ibqp);
+//     pr_devel("ib_destroy_qp(ctx->qp1): " STATUS_COMPLETE);
 
 create_qp_err:
-    ib_destroy_cq(cq.ibcq);
+    ib_destroy_cq(ctx->cq.ibcq);
     pr_devel("ib_destroy_cq: " STATUS_COMPLETE);
 
 create_cq_err:
-    ib_dealloc_pd(pd.ibpd);
+    ib_dealloc_pd(ctx->pd.ibpd);
     pr_devel("ib_dealloc_pd: " STATUS_COMPLETE);
 
 alloc_pd_err:
+    pr_devel(STATUS_COMPLETE);
+    return 0;
+
+}
+
+int test_requester(struct ib_device *ibdev)
+{
+    struct requester_ctx ctx;
+    pr_devel(STATUS_START);
+
+    ctx.ibdev = ibdev;
+    send_request(&ctx);
+
     pr_devel(STATUS_COMPLETE);
     return 0;
 }
