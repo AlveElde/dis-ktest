@@ -45,13 +45,13 @@ int send_request(struct requester_ctx *ctx)
     memset(&ctx->qp1, 0, sizeof(struct qp_ctx));
     ctx->qp1.ibpd = ctx->pd.ibpd;
 
-    ctx->qp1.attr.qp_context     = NULL;
-    ctx->qp1.attr.send_cq        = ctx->cq.ibcq;
-    ctx->qp1.attr.recv_cq        = ctx->cq.ibcq;
-    ctx->qp1.attr.srq            = NULL;
-    ctx->qp1.attr.sq_sig_type    = IB_SIGNAL_ALL_WR;
-    ctx->qp1.attr.qp_type        = IB_QPT_RC;
-    ctx->qp1.attr.create_flags   = 0;
+    ctx->qp1.attr.qp_context    = NULL;
+    ctx->qp1.attr.send_cq       = ctx->cq.ibcq;
+    ctx->qp1.attr.recv_cq       = ctx->cq.ibcq;
+    ctx->qp1.attr.srq           = NULL;
+    ctx->qp1.attr.sq_sig_type   = IB_SIGNAL_ALL_WR;
+    ctx->qp1.attr.qp_type       = IB_QPT_RC;
+    ctx->qp1.attr.create_flags  = 0;
 
     ctx->qp1.attr.cap.max_send_wr        = 10;
     ctx->qp1.attr.cap.max_recv_wr        = 10;
@@ -78,21 +78,27 @@ int send_request(struct requester_ctx *ctx)
 
     /* Create Send Work Request */
     memset(&ctx->send_wr, 0, sizeof(struct send_wr_ctx));
-    ctx->send_wr.ibqp        = ctx->qp1.ibqp;
-    ctx->send_wr.ibbadwr     = NULL;
-	ctx->send_wr.opcode      = IB_WR_SEND;
-    ctx->send_wr.num_sge     = TOTAL_SGE;
-	ctx->send_wr.send_flags  = IB_SEND_SIGNALED;
-	ctx->send_wr.wr_id       = 1;
-
+	ctx->send_wr.opcode     = IB_WR_SEND;
+    ctx->send_wr.num_sge    = TOTAL_SGE;
+	ctx->send_wr.send_flags = IB_SEND_SIGNALED;
+	ctx->send_wr.wr_id      = 1;
     ret = create_send_wr(&ctx->send_wr, ctx->sge);
     if (ret) {
         goto create_wr_err;
     }
 
     /* Post Send Request */
+    ctx->send_wr.ibqp       = ctx->qp1.ibqp;
+    ctx->send_wr.ibbadwr    = NULL;
+    ret = post_send(&ctx->send_wr);
+    if (ret) {
+        goto post_send_err;
+    }
 
+    /* Poll Completion Queue */
+    
 
+post_send_err:
     kfree(ctx->send_wr.ibwr->sg_list);
     pr_devel("kfree(ibwr.sg_list): " STATUS_COMPLETE);
     kfree(ctx->send_wr.ibwr);

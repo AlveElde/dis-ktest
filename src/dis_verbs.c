@@ -5,6 +5,19 @@
 
 #include "dis_verbs.h"
 
+int post_send(struct send_wr_ctx *wr)
+{
+    int ret;
+    pr_devel(STATUS_START);
+    ret = ib_post_send(wr->ibqp, wr->ibwr, &wr->ibbadwr);
+    if (ret) {
+        pr_devel(STATUS_FAIL);
+        return -42;
+    }
+    pr_devel(STATUS_COMPLETE);
+    return 0;
+}
+
 int create_send_wr(struct send_wr_ctx *wr, struct sge_ctx sge[])
 {
     int i;
@@ -15,7 +28,6 @@ int create_send_wr(struct send_wr_ctx *wr, struct sge_ctx sge[])
         pr_devel(STATUS_FAIL);
         return -42;
     }
-
     memset(wr->ibwr, 0, sizeof(struct ib_send_wr));
 
     wr->ibwr->opcode        = wr->opcode;
@@ -29,7 +41,6 @@ int create_send_wr(struct send_wr_ctx *wr, struct sge_ctx sge[])
         kfree(wr->ibwr);
         return -42;
     }
-
     memset(wr->ibwr->sg_list, 0, sizeof(struct ib_sge)*wr->num_sge);
 
     for(i = 0; i < wr->ibwr->num_sge; i++) {

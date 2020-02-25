@@ -37,7 +37,7 @@ struct qp_ctx {
 
 struct send_wr_ctx {
     struct ib_send_wr   *ibwr;
-    struct ib_send_wr   *ibbadwr;
+    const struct ib_send_wr   *ibbadwr;
     struct ib_qp        *ibqp;
     struct ib_sge       *ibsge;
     enum ib_wr_opcode	opcode;
@@ -71,5 +71,4 @@ struct responder_ctx {
 };
 
 int test_requester(struct ib_device *ibdev);
-
 int test_responder(struct ib_device *ibdev);
