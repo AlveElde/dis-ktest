@@ -5,11 +5,24 @@
 
 #include "dis_verbs.h"
 
-int post_send(struct send_wr_ctx *wr)
+int poll_cq(struct cqe_ctx *cqe)
 {
     int ret;
     pr_devel(STATUS_START);
-    ret = ib_post_send(wr->ibqp, wr->ibwr, &wr->ibbadwr);
+    ret = ib_poll_cq(cqe->ibcq, cqe->num_entries, cqe->ibwc);
+    if (ret) {
+        pr_devel(STATUS_FAIL);
+        return -42;
+    }
+    pr_devel(STATUS_COMPLETE);
+    return 0;
+}
+
+int post_send(struct sqe_ctx *sqe)
+{
+    int ret;
+    pr_devel(STATUS_START);
+    ret = ib_post_send(sqe->ibqp, sqe->ibwr, &sqe->ibbadwr);
     if (ret) {
         pr_devel(STATUS_FAIL);
         return -42;

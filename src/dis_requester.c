@@ -53,11 +53,11 @@ int send_request(struct requester_ctx *ctx)
     ctx->qp1.attr.qp_type       = IB_QPT_RC;
     ctx->qp1.attr.create_flags  = 0;
 
-    ctx->qp1.attr.cap.max_send_wr        = 10;
-    ctx->qp1.attr.cap.max_recv_wr        = 10;
-	ctx->qp1.attr.cap.max_send_sge       = 1;
-	ctx->qp1.attr.cap.max_recv_sge       = 1;
-	ctx->qp1.attr.cap.max_inline_data    = 0;
+    ctx->qp1.attr.cap.max_send_wr       = 10;
+    ctx->qp1.attr.cap.max_recv_wr       = 10;
+	ctx->qp1.attr.cap.max_send_sge      = 1;
+	ctx->qp1.attr.cap.max_recv_sge      = 1;
+	ctx->qp1.attr.cap.max_inline_data   = 0;
     ret = create_qp(&ctx->qp1);
     if (ret) {
         goto create_qp_err;
@@ -77,31 +77,33 @@ int send_request(struct requester_ctx *ctx)
     ctx->sge[0].lkey     = 1234;
 
     /* Create Send Work Request */
-    memset(&ctx->send_wr, 0, sizeof(struct send_wr_ctx));
-	ctx->send_wr.opcode     = IB_WR_SEND;
-    ctx->send_wr.num_sge    = TOTAL_SGE;
-	ctx->send_wr.send_flags = IB_SEND_SIGNALED;
-	ctx->send_wr.wr_id      = 1;
-    ret = create_send_wr(&ctx->send_wr, ctx->sge);
+    memset(&ctx->wr, 0, sizeof(struct send_wr_ctx));
+	ctx->wr.opcode      = IB_WR_SEND;
+    ctx->wr.num_sge     = TOTAL_SGE;
+	ctx->wr.send_flags  = IB_SEND_SIGNALED;
+	ctx->wr.wr_id       = 1;
+    ret = create_send_wr(&ctx->wr, ctx->sge);
     if (ret) {
         goto create_wr_err;
     }
 
-    /* Post Send Request */
-    ctx->send_wr.ibqp       = ctx->qp1.ibqp;
-    ctx->send_wr.ibbadwr    = NULL;
-    ret = post_send(&ctx->send_wr);
+    /* Post Send Queue Element */
+    memset(&ctx->sqe, 0, sizeof(struct sqe_ctx));
+    ctx->sqe.ibqp       = ctx->qp1.ibqp;
+    ctx->sqe.ibwr       = ctx->wr.ibwr;
+    ctx->sqe.ibbadwr    = NULL;
+    ret = post_send(&ctx->sqe);
     if (ret) {
         goto post_send_err;
     }
 
     /* Poll Completion Queue */
-    
+
 
 post_send_err:
-    kfree(ctx->send_wr.ibwr->sg_list);
+    kfree(ctx->sqe.ibwr->sg_list);
     pr_devel("kfree(ibwr.sg_list): " STATUS_COMPLETE);
-    kfree(ctx->send_wr.ibwr);
+    kfree(ctx->sqe.ibwr);
     pr_devel("kfree(ibwr): " STATUS_COMPLETE);
 
 create_wr_err:

@@ -35,22 +35,32 @@ struct qp_ctx {
 //     struct ib_pd    *ibpd;
 // };
 
-struct send_wr_ctx {
-    struct ib_send_wr   *ibwr;
-    const struct ib_send_wr   *ibbadwr;
-    struct ib_qp        *ibqp;
-    struct ib_sge       *ibsge;
-    enum ib_wr_opcode	opcode;
-    int                 num_sge;
-    int			        send_flags;
-    u64		            wr_id;
-};
-
 struct sge_ctx {
     struct ib_sge   *ibsge;
 	u64	            addr;
 	u32	            length;
 	u32	            lkey;
+};
+
+struct send_wr_ctx {
+    struct ib_send_wr   *ibwr;
+    struct ib_sge       *ibsge;
+    enum ib_wr_opcode   opcode;
+    int                 num_sge;
+    int			        send_flags;
+    u64		            wr_id;
+};
+
+struct sqe_ctx {
+    struct ib_qp            *ibqp;
+    struct ib_send_wr       *ibwr;
+    const struct ib_send_wr *ibbadwr;
+};
+
+struct cqe_ctx {
+    struct ib_cq    *ibcq;
+    int             num_entries;
+    struct ib_wc    *ibwc;
 };
 
 struct requester_ctx {
@@ -59,7 +69,8 @@ struct requester_ctx {
     struct cq_ctx       cq;
     struct qp_ctx       qp1;
     struct sge_ctx      sge[TOTAL_SGE];
-    struct send_wr_ctx  send_wr;
+    struct send_wr_ctx  wr;
+    struct sqe_ctx      sqe;
 };
 
 struct responder_ctx {
