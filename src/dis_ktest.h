@@ -62,6 +62,14 @@ struct requester_ctx {
     struct send_wr_ctx  send_wr;
 };
 
+struct responder_ctx {
+    struct ib_device    *ibdev;
+    struct pd_ctx       pd;
+    struct cq_ctx       cq;
+    struct qp_ctx       qp1;
+    struct sge_ctx      sge[TOTAL_SGE];
+};
+
 int test_requester(struct ib_device *ibdev);
 
 int test_responder(struct ib_device *ibdev);

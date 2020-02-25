@@ -1,7 +1,11 @@
 obj-m += dis_ktest.o
 
 SRC := ./src
-dis_ktest-objs := $(SRC)/dis_ktest.o $(SRC)/dis_requester.o  $(SRC)/dis_responder.o
+dis_ktest-objs := $(SRC)/dis_ktest.o  		\
+					$(SRC)/dis_verbs.o		\
+					$(SRC)/dis_requester.o  \
+					$(SRC)/dis_responder.o	\
+					
 
 EXTRA_CFLAGS += -DDEBUG
 

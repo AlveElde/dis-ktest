@@ -3,114 +3,11 @@
 #include <linux/types.h>
 #include <linux/string.h>
 
-#include "dis_ktest.h"
+#include "dis_verbs.h"
 
-
-int create_send_wr(struct send_wr_ctx *wr, struct sge_ctx sge[])
-{
-    int i;
-    pr_devel(STATUS_START);
-
-    wr->ibwr = kzalloc(sizeof(struct ib_send_wr), GFP_KERNEL);
-    if (!wr->ibwr) {
-        pr_devel(STATUS_FAIL);
-        return -42;
-    }
-
-    memset(wr->ibwr, 0, sizeof(struct ib_send_wr));
-
-    wr->ibwr->opcode        = wr->opcode;
-    wr->ibwr->num_sge       = wr->num_sge;
-    wr->ibwr->send_flags    = wr->send_flags;
-    wr->ibwr->wr_id         = wr->wr_id;
-
-    wr->ibwr->sg_list = kzalloc(sizeof(struct ib_sge)*wr->num_sge, GFP_KERNEL);
-    if (!wr->ibwr) {
-        pr_devel(STATUS_FAIL);
-        kfree(wr->ibwr);
-        return -42;
-    }
-
-    memset(wr->ibwr->sg_list, 0, sizeof(struct ib_sge)*wr->num_sge);
-
-    for(i = 0; i < wr->ibwr->num_sge; i++) {
-        sge[i].ibsge = wr->ibwr->sg_list + (sizeof(struct ib_sge) * i);
-        sge[i].ibsge->addr      = sge[i].addr;
-        sge[i].ibsge->length    = sge[i].length;
-        sge[i].ibsge->lkey      = sge[i].lkey;
-    }
-
-    pr_devel(STATUS_COMPLETE);
-    return 0;
-}
-
-// int alloc_mr(struct mr_ctx *mr)
-// {
-//     pr_devel(STATUS_START);
-//     mr->ibmr = ib_alloc_mr(&mr->ibpd, IB_ACCESS_REMOTE_READ |
-//                             IB_ACCESS_REMOTE_WRITE |
-//                             IB_ACCESS_LOCAL_WRITE);
-//     if (!mr->ibmr) {
-//         pr_devel(STATUS_FAIL);
-//         return -42;
-//     }
-//     pr_devel(STATUS_COMPLETE);
-//     return 0;
-// }
-
-void qp_event_handler(struct ib_event *ibevent, void *qp_context)
+void requester_cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 {
     return;
-}
-
-int create_qp(struct qp_ctx *qp)
-{
-    pr_devel(STATUS_START);
-    qp->ibqp = ib_create_qp(qp->ibpd, &qp->attr);
-    if (!qp->ibqp) {
-        pr_devel(STATUS_FAIL);
-        return -42;
-    }
-    pr_devel(STATUS_COMPLETE);
-    return 0;
-}
-
-void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
-{
-    return;
-}
-
-void cq_cq_event_handler(struct ib_event *ibevent, void *cq_context)
-{
-    return;
-}
-
-int create_cq(struct cq_ctx *cq)
-{
-    pr_devel(STATUS_START);
-    cq->ibcq = ib_create_cq(cq->ibdev,
-                                cq->comp_handler,
-                                cq->event_handler,
-                                cq->context,
-                                &cq->attr);
-    if (!cq->ibcq) {
-        pr_devel(STATUS_FAIL);
-        return -42;
-    }
-    pr_devel(STATUS_COMPLETE);
-    return 0;
-}
-
-int alloc_pd(struct pd_ctx *pd)
-{
-    pr_devel(STATUS_START);
-    pd->ibpd = ib_alloc_pd(pd->ibdev, pd->flags);
-    if (!pd->ibpd) {
-        pr_devel(STATUS_FAIL);
-		return -42;
-    }
-    pr_devel(STATUS_COMPLETE);
-    return 0;
 }
 
 int send_request(struct requester_ctx *ctx)
@@ -132,7 +29,7 @@ int send_request(struct requester_ctx *ctx)
     /* Create a Completion Queue */
     memset(&ctx->cq, 0, sizeof(struct cq_ctx));
     ctx->cq.ibdev               = ctx->ibdev;
-    ctx->cq.comp_handler        = cq_comp_handler,
+    ctx->cq.comp_handler        = requester_cq_comp_handler,
     ctx->cq.event_handler       = NULL,
     ctx->cq.context             = NULL,
 
@@ -174,6 +71,7 @@ int send_request(struct requester_ctx *ctx)
     // }
 
     /* Define Segments To Send */
+    memset(&ctx->sge[0], 0, sizeof(struct sge_ctx));
     ctx->sge[0].addr     = (uintptr_t)message;
     ctx->sge[0].length   = strlen(message);
     ctx->sge[0].lkey     = 1234;
@@ -193,7 +91,6 @@ int send_request(struct requester_ctx *ctx)
     }
 
     /* Post Send Request */
-
 
 
     kfree(ctx->send_wr.ibwr->sg_list);
@@ -220,17 +117,17 @@ create_cq_err:
 alloc_pd_err:
     pr_devel(STATUS_COMPLETE);
     return 0;
-
 }
 
 int test_requester(struct ib_device *ibdev)
 {
+    int ret;
     struct requester_ctx ctx;
     pr_devel(STATUS_START);
 
     ctx.ibdev = ibdev;
-    send_request(&ctx);
+    ret = send_request(&ctx);
 
     pr_devel(STATUS_COMPLETE);
-    return 0;
+    return ret;
 }
