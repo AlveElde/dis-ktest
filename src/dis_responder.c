@@ -116,7 +116,22 @@ int responder_receive_request(struct responder_ctx *ctx)
         goto verbs_post_recv_err;
     }
 
-// verbs_poll_cq_err:
+    /* Poll Completion Queue */
+    memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
+    ctx->cqe.ibcq           = ctx->cq.ibcq;
+    ctx->cqe.num_entries    = DIS_MAX_CQE;
+    ret = verbs_poll_cq(&ctx->cqe);
+    if (ret) {
+        goto verbs_poll_cq_err;
+    }
+
+    /* Print Result Of Transmission */
+    for(i = 0; i < DIS_MAX_CQE; i++) {
+        pr_info("Responder received transmission %d with status: %s",
+                i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
+    }
+
+verbs_poll_cq_err:
 verbs_post_recv_err:
     kfree(ctx->rqe.ibwr.sg_list);
     pr_devel("kfree(ibwr.sg_list): " DIS_STATUS_COMPLETE);
