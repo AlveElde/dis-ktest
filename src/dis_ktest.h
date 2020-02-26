@@ -1,13 +1,12 @@
 #include <rdma/ib_verbs.h>
 
-#define STATUS_START    "Started.\n"
-#define STATUS_COMPLETE "Completed.\n"
-#define STATUS_FAIL     "Failed.\n"
-
-#define TOTAL_PD    1
-#define TOTAL_CQ    1
-#define TOTAL_QP    1
-#define TOTAL_SGE   1
+#define DIS_MAX_PD      1
+#define DIS_MAX_CQ      1
+#define DIS_MAX_QP      1
+#define DIS_MAX_SGE     1
+#define DIS_MAX_SQE     1
+#define DIS_MAX_CQE     DIS_MAX_SQE
+#define DIS_MAX_MSG_LEN 128
 
 struct pd_ctx {
     struct ib_pd        *ibpd;
@@ -42,25 +41,16 @@ struct sge_ctx {
 	u32	            lkey;
 };
 
-struct send_wr_ctx {
-    struct ib_send_wr   *ibwr;
-    struct ib_sge       *ibsge;
-    enum ib_wr_opcode   opcode;
-    int                 num_sge;
-    int			        send_flags;
-    u64		            wr_id;
-};
-
 struct sqe_ctx {
     struct ib_qp            *ibqp;
-    struct ib_send_wr       *ibwr;
+    struct ib_send_wr       ibwr;
     const struct ib_send_wr *ibbadwr;
 };
 
 struct cqe_ctx {
     struct ib_cq    *ibcq;
     int             num_entries;
-    struct ib_wc    *ibwc;
+    struct ib_wc    ibwc[DIS_MAX_CQE];
 };
 
 struct requester_ctx {
@@ -68,9 +58,9 @@ struct requester_ctx {
     struct pd_ctx       pd;
     struct cq_ctx       cq;
     struct qp_ctx       qp1;
-    struct sge_ctx      sge[TOTAL_SGE];
-    struct send_wr_ctx  wr;
+    struct sge_ctx      sge[DIS_MAX_SGE];
     struct sqe_ctx      sqe;
+    struct cqe_ctx      cqe;
 };
 
 struct responder_ctx {
@@ -78,7 +68,7 @@ struct responder_ctx {
     struct pd_ctx       pd;
     struct cq_ctx       cq;
     struct qp_ctx       qp1;
-    struct sge_ctx      sge[TOTAL_SGE];
+    struct sge_ctx      sge[DIS_MAX_SGE];
 };
 
 int test_requester(struct ib_device *ibdev);

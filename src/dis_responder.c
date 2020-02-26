@@ -19,11 +19,11 @@ int test_responder(struct ib_device *ibdev)
 {
     int ret;
     struct responder_ctx ctx;
-    pr_devel(STATUS_START);
+    pr_devel(DIS_STATUS_START);
 
     ctx.ibdev = ibdev;
     ret = receive_request(&ctx);
 
-    pr_devel(STATUS_COMPLETE);
+    pr_devel(DIS_STATUS_COMPLETE);
     return ret;
 }

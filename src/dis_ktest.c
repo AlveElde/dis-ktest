@@ -18,7 +18,7 @@ module_param(is_responder, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 static void dis_ktest_add(struct ib_device *ibdev)
 {
     int ret;
-    pr_devel(STATUS_START);
+    pr_devel(DIS_STATUS_START);
 
     if(is_responder) {
         ret = test_responder(ibdev);
@@ -26,12 +26,12 @@ static void dis_ktest_add(struct ib_device *ibdev)
         ret = test_requester(ibdev);
     }
 
-    pr_devel(STATUS_COMPLETE);
+    pr_devel(DIS_STATUS_COMPLETE);
 }
 
 static void dis_ktest_remove(struct ib_device *ib_device, void *client_data)
 {
-    pr_devel(STATUS_COMPLETE);
+    pr_devel(DIS_STATUS_COMPLETE);
 }
 
 static struct ib_client disibclient = {
@@ -44,25 +44,25 @@ static int __init dis_ktest_init(void)
 {
     int ret;
 
-    pr_devel(STATUS_START);
+    pr_devel(DIS_STATUS_START);
 
 	ret = ib_register_client(&disibclient);
 	if (ret) {
-        pr_err(STATUS_FAIL);
+        pr_err(DIS_STATUS_FAIL);
 		return -42;
     }
 
-    pr_devel(STATUS_COMPLETE);
+    pr_devel(DIS_STATUS_COMPLETE);
     return 0;
 }
 
 static void __exit dis_ktest_exit(void)
 {
-    pr_devel(STATUS_START);
+    pr_devel(DIS_STATUS_START);
 
     ib_unregister_client(&disibclient);
 
-    pr_devel(STATUS_COMPLETE);
+    pr_devel(DIS_STATUS_COMPLETE);
 }
 
 module_init(dis_ktest_init);
