@@ -5,12 +5,39 @@
 
 #include "dis_verbs.h"
 
+int requester_create_sg_list(struct sge_ctx sge[], struct sqe_ctx *sqe)
+{
+    int i;
+    size_t sg_list_size;
+    pr_devel(DIS_STATUS_START);
+
+    //TODO: Check num sge against max
+    sg_list_size = sizeof(struct ib_sge) * sqe->ibwr.num_sge;
+
+    sqe->ibwr.sg_list = kzalloc(sg_list_size, GFP_KERNEL);
+    if (!sqe->ibwr.sg_list) {
+        pr_devel(DIS_STATUS_FAIL);
+        return -42;
+    }
+    memset(sqe->ibwr.sg_list, 0, sg_list_size);
+
+    for(i = 0; i < sqe->ibwr.num_sge; i++) {
+        sge[i].ibsge = sqe->ibwr.sg_list + (sizeof(struct ib_sge) * i);
+        sge[i].ibsge->addr      = sge[i].addr;
+        sge[i].ibsge->length    = sge[i].length;
+        sge[i].ibsge->lkey      = sge[i].lkey;
+    }
+
+    pr_devel(DIS_STATUS_COMPLETE);
+    return 0;
+}
+
 void requester_cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 {
     return;
 }
 
-int send_request(struct requester_ctx *ctx)
+int requester_send_request(struct requester_ctx *ctx)
 {
     int ret, i;
     char message[30] = "Hello There!";
@@ -21,9 +48,9 @@ int send_request(struct requester_ctx *ctx)
     memset(&ctx->pd, 0, sizeof(struct pd_ctx));
     ctx->pd.ibdev = ctx->ibdev;
     ctx->pd.flags = 0;
-    ret = alloc_pd(&ctx->pd);
+    ret = verb_alloc_pd(&ctx->pd);
     if (ret) {
-        goto alloc_pd_err;
+        goto verb_alloc_pd_err;
     }
 
     /* Create a Completion Queue */
@@ -36,9 +63,9 @@ int send_request(struct requester_ctx *ctx)
     ctx->cq.attr.cqe            = 10,
     ctx->cq.attr.comp_vector    = 0,
     ctx->cq.attr.flags          = 0,
-    ret = create_cq(&ctx->cq);
+    ret = verb_create_cq(&ctx->cq);
     if (ret) {
-        goto create_cq_err;
+        goto verb_create_cq_err;
     }
 
     /* Create Queue Pair 1*/
@@ -58,14 +85,14 @@ int send_request(struct requester_ctx *ctx)
 	ctx->qp1.attr.cap.max_send_sge      = 1;
 	ctx->qp1.attr.cap.max_recv_sge      = 1;
 	ctx->qp1.attr.cap.max_inline_data   = 0;
-    ret = create_qp(&ctx->qp1);
+    ret = verb_create_qp(&ctx->qp1);
     if (ret) {
-        goto create_qp_err;
+        goto verb_create_qp_err;
     }
 
     /* Get DMA Memory Region */
     // mr.ibpd = pd.ibpd;
-    // ret = alloc_mr(&mr);
+    // ret = verb_alloc_mr(&mr);
     // if (ret) {
     //     goto get_mr_err;
     // }
@@ -75,33 +102,33 @@ int send_request(struct requester_ctx *ctx)
     ctx->sqe.ibqp       = ctx->qp1.ibqp;
     ctx->sqe.ibbadwr    = NULL;
 
-	ctx->sqe.ibwr.opcode      = IB_WR_SEND;
-	ctx->sqe.ibwr.send_flags  = IB_SEND_SIGNALED;
-	ctx->sqe.ibwr.wr_id       = 1;
-    ctx->sqe.ibwr.num_sge     = 1;
+	ctx->sqe.ibwr.opcode        = IB_WR_SEND;
+	ctx->sqe.ibwr.send_flags    = IB_SEND_SIGNALED;
+	ctx->sqe.ibwr.wr_id         = 1;
+    ctx->sqe.ibwr.num_sge       = 1;
     
     /* Create Segment List */
-    ctx->sge[0].addr     = (uintptr_t)message;
-    ctx->sge[0].length   = strlen(message);
-    ctx->sge[0].lkey     = 1234;
-    ret = create_sg_list(ctx->sge, &ctx->sqe);
+    ctx->sge[0].addr    = (uintptr_t)message;
+    ctx->sge[0].length  = strlen(message);
+    ctx->sge[0].lkey    = 1234;
+    ret = requester_create_sg_list(ctx->sge, &ctx->sqe);
     if (ret) {
         goto create_sg_list_err;
     }
 
     /* Post Send Queue Element */
-    ret = post_send(&ctx->sqe);
+    ret = verb_post_send(&ctx->sqe);
     if (ret) {
-        goto post_send_err;
+        goto verb_post_send_err;
     }
 
     /* Poll Completion Queue */
     memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
-    ret = poll_cq(&ctx->cqe);
+    ret = verb_poll_cq(&ctx->cqe);
     if (ret) {
-        goto poll_cq_err;
+        goto verb_poll_cq_err;
     }
 
     /* Print Result Of Transmission */
@@ -136,14 +163,14 @@ alloc_pd_err:
     return 0;
 }
 
-int test_requester(struct ib_device *ibdev)
+int requester_test(struct ib_device *ibdev)
 {
     int ret;
     struct requester_ctx ctx;
     pr_devel(DIS_STATUS_START);
 
     ctx.ibdev = ibdev;
-    ret = send_request(&ctx);
+    ret = requester_send_request(&ctx);
 
     pr_devel(DIS_STATUS_COMPLETE);
     return ret;

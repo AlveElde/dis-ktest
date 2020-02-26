@@ -71,5 +71,5 @@ struct responder_ctx {
     struct sge_ctx      sge[DIS_MAX_SGE];
 };
 
-int test_requester(struct ib_device *ibdev);
-int test_responder(struct ib_device *ibdev);
+int requester_test(struct ib_device *ibdev);
+int responder_test(struct ib_device *ibdev);

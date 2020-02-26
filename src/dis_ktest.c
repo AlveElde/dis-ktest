@@ -21,9 +21,9 @@ static void dis_ktest_add(struct ib_device *ibdev)
     pr_devel(DIS_STATUS_START);
 
     if(is_responder) {
-        ret = test_responder(ibdev);
+        ret = responder_test(ibdev);
     } else {
-        ret = test_requester(ibdev);
+        ret = requester_test(ibdev);
     }
 
     pr_devel(DIS_STATUS_COMPLETE);
@@ -43,7 +43,6 @@ static struct ib_client disibclient = {
 static int __init dis_ktest_init(void)
 {
     int ret;
-
     pr_devel(DIS_STATUS_START);
 
 	ret = ib_register_client(&disibclient);
