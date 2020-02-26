@@ -3,6 +3,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 
+#include "dis_requester.h"
 #include "dis_verbs.h"
 
 int requester_create_sg_list(struct sge_ctx sge[], struct sqe_ctx *sqe)
@@ -40,7 +41,7 @@ void requester_cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 int requester_send_request(struct requester_ctx *ctx)
 {
     int ret, i;
-    char message[30] = "Hello There!";
+    char message[DIS_MAX_MSG_LEN] = "Hello There!";
     
     pr_devel(DIS_STATUS_START);
 
@@ -48,9 +49,9 @@ int requester_send_request(struct requester_ctx *ctx)
     memset(&ctx->pd, 0, sizeof(struct pd_ctx));
     ctx->pd.ibdev = ctx->ibdev;
     ctx->pd.flags = 0;
-    ret = verb_alloc_pd(&ctx->pd);
+    ret = verbs_alloc_pd(&ctx->pd);
     if (ret) {
-        goto verb_alloc_pd_err;
+        goto verbs_alloc_pd_err;
     }
 
     /* Create a Completion Queue */
@@ -63,9 +64,9 @@ int requester_send_request(struct requester_ctx *ctx)
     ctx->cq.attr.cqe            = 10,
     ctx->cq.attr.comp_vector    = 0,
     ctx->cq.attr.flags          = 0,
-    ret = verb_create_cq(&ctx->cq);
+    ret = verbs_create_cq(&ctx->cq);
     if (ret) {
-        goto verb_create_cq_err;
+        goto verbs_create_cq_err;
     }
 
     /* Create Queue Pair 1*/
@@ -85,14 +86,14 @@ int requester_send_request(struct requester_ctx *ctx)
 	ctx->qp1.attr.cap.max_send_sge      = 1;
 	ctx->qp1.attr.cap.max_recv_sge      = 1;
 	ctx->qp1.attr.cap.max_inline_data   = 0;
-    ret = verb_create_qp(&ctx->qp1);
+    ret = verbs_create_qp(&ctx->qp1);
     if (ret) {
-        goto verb_create_qp_err;
+        goto verbs_create_qp_err;
     }
 
     /* Get DMA Memory Region */
     // mr.ibpd = pd.ibpd;
-    // ret = verb_alloc_mr(&mr);
+    // ret = verbs_alloc_mr(&mr);
     // if (ret) {
     //     goto get_mr_err;
     // }
@@ -113,22 +114,22 @@ int requester_send_request(struct requester_ctx *ctx)
     ctx->sge[0].lkey    = 1234;
     ret = requester_create_sg_list(ctx->sge, &ctx->sqe);
     if (ret) {
-        goto create_sg_list_err;
+        goto requester_create_sg_list_err;
     }
 
     /* Post Send Queue Element */
-    ret = verb_post_send(&ctx->sqe);
+    ret = verbs_post_send(&ctx->sqe);
     if (ret) {
-        goto verb_post_send_err;
+        goto verbs_post_send_err;
     }
 
     /* Poll Completion Queue */
     memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
-    ret = verb_poll_cq(&ctx->cqe);
+    ret = verbs_poll_cq(&ctx->cqe);
     if (ret) {
-        goto verb_poll_cq_err;
+        goto verbs_poll_cq_err;
     }
 
     /* Print Result Of Transmission */
@@ -137,12 +138,12 @@ int requester_send_request(struct requester_ctx *ctx)
                 i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
     }
 
-poll_cq_err:
-post_send_err:
+verbs_poll_cq_err:
+verbs_post_send_err:
     kfree(ctx->sqe.ibwr.sg_list);
     pr_devel("kfree(ibwr.sg_list): " DIS_STATUS_COMPLETE);
 
-create_sg_list_err:
+requester_create_sg_list_err:
     ib_destroy_qp(ctx->qp1.ibqp);
     pr_devel("ib_destroy_qp(ctx->qp1): " DIS_STATUS_COMPLETE);
 
@@ -150,15 +151,15 @@ create_sg_list_err:
 //     ib_destroy_qp(ctx->qp1.ibqp);
 //     pr_devel("ib_destroy_qp(ctx->qp1): " DIS_STATUS_COMPLETE);
 
-create_qp_err:
+verbs_create_qp_err:
     ib_destroy_cq(ctx->cq.ibcq);
     pr_devel("ib_destroy_cq: " DIS_STATUS_COMPLETE);
 
-create_cq_err:
+verbs_create_cq_err:
     ib_dealloc_pd(ctx->pd.ibpd);
     pr_devel("ib_dealloc_pd: " DIS_STATUS_COMPLETE);
 
-alloc_pd_err:
+verbs_alloc_pd_err:
     pr_devel(DIS_STATUS_COMPLETE);
     return 0;
 }

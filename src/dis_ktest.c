@@ -5,7 +5,8 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 
-#include "dis_ktest.h"
+#include "dis_requester.h"
+#include "dis_responder.h"
 
 MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
