@@ -47,7 +47,7 @@ int requester_send_request(struct requester_ctx *ctx)
 
     /* Create Protection Domain */
     memset(&ctx->pd, 0, sizeof(struct pd_ctx));
-    ctx->pd.ibdev = ctx->ibdev;
+    ctx->pd.ibdev = ctx->dev.ibdev;
     ctx->pd.flags = 0;
     ret = verbs_alloc_pd(&ctx->pd);
     if (ret) {
@@ -56,14 +56,14 @@ int requester_send_request(struct requester_ctx *ctx)
 
     /* Create a Completion Queue */
     memset(&ctx->cq, 0, sizeof(struct cq_ctx));
-    ctx->cq.ibdev               = ctx->ibdev;
+    ctx->cq.ibdev               = ctx->dev.ibdev;
     ctx->cq.comp_handler        = requester_cq_comp_handler,
     ctx->cq.event_handler       = NULL,
     ctx->cq.context             = NULL,
 
-    ctx->cq.attr.cqe            = 10,
-    ctx->cq.attr.comp_vector    = 0,
-    ctx->cq.attr.flags          = 0,
+    ctx->cq.init_attr.cqe           = 10,
+    ctx->cq.init_attr.comp_vector   = 0,
+    ctx->cq.init_attr.flags         = 0,
     ret = verbs_create_cq(&ctx->cq);
     if (ret) {
         goto verbs_create_cq_err;
@@ -73,19 +73,19 @@ int requester_send_request(struct requester_ctx *ctx)
     memset(&ctx->qp1, 0, sizeof(struct qp_ctx));
     ctx->qp1.ibpd = ctx->pd.ibpd;
 
-    ctx->qp1.attr.qp_context    = NULL;
-    ctx->qp1.attr.send_cq       = ctx->cq.ibcq;
-    ctx->qp1.attr.recv_cq       = ctx->cq.ibcq;
-    ctx->qp1.attr.srq           = NULL;
-    ctx->qp1.attr.sq_sig_type   = IB_SIGNAL_ALL_WR;
-    ctx->qp1.attr.qp_type       = IB_QPT_RC;
-    ctx->qp1.attr.create_flags  = 0;
+    ctx->qp1.init_attr.qp_context   = NULL;
+    ctx->qp1.init_attr.send_cq      = ctx->cq.ibcq;
+    ctx->qp1.init_attr.recv_cq      = ctx->cq.ibcq;
+    ctx->qp1.init_attr.srq          = NULL;
+    ctx->qp1.init_attr.sq_sig_type  = IB_SIGNAL_ALL_WR;
+    ctx->qp1.init_attr.qp_type      = IB_QPT_RC;
+    ctx->qp1.init_attr.create_flags = 0;
 
-    ctx->qp1.attr.cap.max_send_wr       = 10;
-    ctx->qp1.attr.cap.max_recv_wr       = 10;
-	ctx->qp1.attr.cap.max_send_sge      = 1;
-	ctx->qp1.attr.cap.max_recv_sge      = 1;
-	ctx->qp1.attr.cap.max_inline_data   = 0;
+    ctx->qp1.init_attr.cap.max_send_wr      = 10;
+    ctx->qp1.init_attr.cap.max_recv_wr      = 10;
+	ctx->qp1.init_attr.cap.max_send_sge     = 1;
+	ctx->qp1.init_attr.cap.max_recv_sge     = 1;
+	ctx->qp1.init_attr.cap.max_inline_data  = 0;
     ret = verbs_create_qp(&ctx->qp1);
     if (ret) {
         goto verbs_create_qp_err;
@@ -117,6 +117,8 @@ int requester_send_request(struct requester_ctx *ctx)
         goto requester_create_sg_list_err;
     }
 
+    /* Set up connection to responder */
+
     /* Post Send Queue Element */
     ret = verbs_post_send(&ctx->sqe);
     if (ret) {
@@ -127,7 +129,7 @@ int requester_send_request(struct requester_ctx *ctx)
     memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
-    ret = verbs_poll_cq(&ctx->cqe);
+    ret = verbs_poll_cq(&ctx->cqe, 10);
     if (ret) {
         goto verbs_poll_cq_err;
     }
@@ -170,9 +172,16 @@ int requester_test(struct ib_device *ibdev)
     struct requester_ctx ctx;
     pr_devel(DIS_STATUS_START);
 
-    ctx.ibdev = ibdev;
+    /* Query Device Port */
+    ctx.dev.ibdev       = ibdev;
+    ctx.dev.port_num    = 1;
+    ret = verbs_query_port(&ctx.dev);
+    if (ret) {
+        return 0;
+    }
+
     ret = requester_send_request(&ctx);
 
     pr_devel(DIS_STATUS_COMPLETE);
-    return ret;
+    return 0;
 }
