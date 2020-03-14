@@ -10,8 +10,6 @@
 int responder_create_socket(void)
 {  
     //struct socket *sock = NULL;
-
-
     return 0;
 }
 
@@ -112,23 +110,7 @@ int responder_receive_request(struct responder_ctx *ctx)
         goto verbs_create_qp_err;
     }
 
-    /* Create Receive Queue Element */
-    memset(&ctx->rqe, 0, sizeof(struct rqe_ctx));
-    ctx->rqe.ibqp       = ctx->qp1.ibqp;
-    ctx->rqe.ibbadwr    = NULL;
-
-    ctx->rqe.ibwr.num_sge       = 1;
-    ctx->rqe.ibwr.wr_id         = 1;
-    ctx->rqe.ibwr.next          = NULL;
     
-    /* Create Segment List */
-    ctx->sge[0].addr    = (uintptr_t)message;
-    ctx->sge[0].length  = DIS_MAX_MSG_LEN;
-    ctx->sge[0].lkey    = 1234;
-    ret = responder_create_sg_list(ctx->sge, &ctx->rqe);
-    if (ret) {
-        goto responder_create_sg_list_err;
-    }
 
     /* Transition Queue Pair to Initalize state */
     ctx->qp1.attr.qp_state          = IB_QPS_INIT;
@@ -150,19 +132,20 @@ int responder_receive_request(struct responder_ctx *ctx)
     /* Transition Queue Pair to Ready To Receive state */
     ctx->qp1.attr.qp_state              = IB_QPS_RTR;
     ctx->qp1.attr.path_mtu              = IB_MTU_4096;
-    ctx->qp1.attr.dest_qp_num           = 1;
-    ctx->qp1.attr.rq_psn                = 1;
-    ctx->qp1.attr.max_dest_rd_atomic    = 1;
-    ctx->qp1.attr.min_rnr_timer         = 1;
+    ctx->qp1.attr.dest_qp_num           = 1;    // Dest QPN
+    ctx->qp1.attr.rq_psn                = 10;   // RQ Packet Sequence Number
+    ctx->qp1.attr.max_dest_rd_atomic    = 1;    // Responder Resources for RDMA read/atomic ops
+    ctx->qp1.attr.min_rnr_timer         = 1;    // Minimum RNR NAK
 
-    ctx->qp1.attr.ah_attr.sl            = 1;
-    ctx->qp1.attr.ah_attr.static_rate   = 1;
+    ctx->qp1.attr.ah_attr.sl            = 0;    // Service Level
+    ctx->qp1.attr.ah_attr.static_rate   = 1;    // 
     ctx->qp1.attr.ah_attr.type          = RDMA_AH_ATTR_TYPE_UNDEFINED;
     ctx->qp1.attr.ah_attr.port_num      = ctx->dev.port_num;
-    ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH;
+    ctx->qp1.attr.ah_attr.ah_flags      = 0; // Required by dis
+    // ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
 
     ctx->qp1.attr.ah_attr.grh.hop_limit     = 1;
-    ctx->qp1.attr.ah_attr.grh.sgid_index    = 1;
+    ctx->qp1.attr.ah_attr.grh.sgid_index    = 1; 
     ctx->qp1.attr.ah_attr.grh.sgid_attr     = NULL;
 
     ctx->qp1.attr_mask = IB_QP_STATE;
@@ -179,11 +162,11 @@ int responder_receive_request(struct responder_ctx *ctx)
 
     /* Transition Queue Pair to Ready To Send state */
     ctx->qp1.attr.qp_state      = IB_QPS_RTS;
-    ctx->qp1.attr.timeout       = 10;
-    ctx->qp1.attr.retry_cnt     = 10;
-    ctx->qp1.attr.rnr_retry     = 10;
-    ctx->qp1.attr.sq_psn        = 10;
-    ctx->qp1.attr.max_rd_atomic = 10;
+    ctx->qp1.attr.timeout       = 10;   // Local ACK Timeout
+    ctx->qp1.attr.retry_cnt     = 10;   // Retry count 
+    ctx->qp1.attr.rnr_retry     = 10;   // RNR retry count
+    ctx->qp1.attr.sq_psn        = 10;   // SQ Packet Sequence Number
+    ctx->qp1.attr.max_rd_atomic = 1;    // Number of Outstanding RDMA Read/atomic ops at destination.
 
     ctx->qp1.attr_mask = IB_QP_STATE;
     ctx->qp1.attr_mask |= IB_QP_TIMEOUT;
@@ -197,7 +180,25 @@ int responder_receive_request(struct responder_ctx *ctx)
     }
 
     /* Set up connection to requester */
+    //TODO: Set up socket based exchange of GID
 
+    /* Create Receive Queue Element */
+    memset(&ctx->rqe, 0, sizeof(struct rqe_ctx));
+    ctx->rqe.ibqp       = ctx->qp1.ibqp;
+    ctx->rqe.ibbadwr    = NULL;
+
+    ctx->rqe.ibwr.num_sge       = 1; // Number of segments to receive
+    ctx->rqe.ibwr.wr_id         = 1;
+    ctx->rqe.ibwr.next          = NULL;
+    
+    /* Create Segment List */
+    ctx->sge[0].addr    = (uintptr_t)message;
+    ctx->sge[0].length  = DIS_MAX_MSG_LEN;
+    ctx->sge[0].lkey    = 1234;
+    ret = responder_create_sg_list(ctx->sge, &ctx->rqe);
+    if (ret) {
+        goto responder_create_sg_list_err;
+    }
 
     /* Post Receive Queue Element */
     ret = verbs_post_recv(&ctx->rqe);
@@ -209,16 +210,18 @@ int responder_receive_request(struct responder_ctx *ctx)
     memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
-    ret = verbs_poll_cq(&ctx->cqe, 10);
-    if (ret) {
+    ret = verbs_poll_cq(&ctx->cqe, 1);
+    if (ret < 0) {
         goto verbs_poll_cq_err;
     }
 
-    // /* Print Result Of Transmission */
-    // for(i = 0; i < DIS_MAX_CQE; i++) {
-    //     pr_info("Responder received transmission %d with status: %s",
-    //             i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
-    // }
+    pr_info("Responder Work Completions: %d", ret);
+
+    /* Print Result Of Transmission */
+    for(i = 0; i < ret; i++) {
+        pr_info("Responder received transmission %d with status: %s",
+                i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
+    }
 
 verbs_poll_cq_err:
 verbs_post_recv_err:

@@ -106,7 +106,7 @@ int requester_send_request(struct requester_ctx *ctx)
 	ctx->sqe.ibwr.opcode        = IB_WR_SEND;
 	ctx->sqe.ibwr.send_flags    = IB_SEND_SIGNALED;
 	ctx->sqe.ibwr.wr_id         = 1;
-    ctx->sqe.ibwr.num_sge       = 1;
+    ctx->sqe.ibwr.num_sge       = 1; // Number of segments to send
     
     /* Create Segment List */
     ctx->sge[0].addr    = (uintptr_t)message;

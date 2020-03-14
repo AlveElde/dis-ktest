@@ -2,7 +2,7 @@
 #define __DIS_VERBS_H__
 
 #include <rdma/ib_verbs.h>
-#include <rdma/ib_cache.h>
+// #include <rdma/ib_cache.h>
 
 #define DIS_MAX_PD      1
 #define DIS_MAX_CQ      1

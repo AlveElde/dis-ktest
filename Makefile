@@ -18,16 +18,14 @@ install:
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 
-req: 
+req:
 	sudo dmesg -C
 	sudo insmod dis_ktest.ko is_responder=N
 	sudo rmmod dis_ktest.ko
-	dmesg
+	dmesg -t
 
-res: 
+res:
 	sudo dmesg -C
 	sudo insmod dis_ktest.ko is_responder=Y
 	sudo rmmod dis_ktest.ko
-	dmesg
-
-full: clean all req res
+	dmesg -t
