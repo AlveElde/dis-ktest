@@ -4,10 +4,10 @@
 #include <linux/string.h>
 #include <linux/socket.h>
 
-#include "dis_responder.h"
+#include "dis_send_receive.h"
 #include "dis_verbs.h"
 
-int responder_create_socket(void)
+int create_socket(void)
 {  
     //struct socket *sock = NULL;
     return 0;
@@ -25,44 +25,25 @@ int responder_create_socket(void)
 //     return 0;
 // }
 
-int responder_create_sg_list(struct sge_ctx sge[], struct rqe_ctx *rqe)
-{
-    int i;
-    size_t sg_list_size;
-    pr_devel(DIS_STATUS_START);
-
-    //TODO: Check num sge against max
-    sg_list_size = sizeof(struct ib_sge) * rqe->ibwr.num_sge;
-
-    rqe->ibwr.sg_list = kzalloc(sg_list_size, GFP_KERNEL);
-    if (!rqe->ibwr.sg_list) {
-        pr_devel(DIS_STATUS_FAIL);
-        return -42;
-    }
-    memset(rqe->ibwr.sg_list, 0, sg_list_size);
-
-    for(i = 0; i < rqe->ibwr.num_sge; i++) {
-        sge[i].ibsge = rqe->ibwr.sg_list + (sizeof(struct ib_sge) * i);
-        sge[i].ibsge->addr      = sge[i].addr;
-        sge[i].ibsge->length    = sge[i].length;
-        sge[i].ibsge->lkey      = sge[i].lkey;
-    }
-
-    pr_devel(DIS_STATUS_COMPLETE);
-    return 0;
-}
-
-void responder_cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
+void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 {
     return;
 }
 
-int responder_receive_request(struct responder_ctx *ctx)
+int send_receive(struct send_receive_ctx *ctx)
 {
     int ret, i;
-    char message[DIS_MAX_MSG_LEN];
+    char send_message[DIS_MAX_MSG_LEN] = "Hello There!\n";
+    char recv_message[DIS_MAX_MSG_LEN];
     
     pr_devel(DIS_STATUS_START);
+
+    /* Query Device Port */
+    ctx->dev.port_num    = 1;
+    ret = verbs_query_port(&ctx->dev);
+    if (ret) {
+        goto verbs_query_port_err;
+    }
 
     /* Create Protection Domain */
     memset(&ctx->pd, 0, sizeof(struct pd_ctx));
@@ -70,13 +51,14 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->pd.flags = 0;
     ret = verbs_alloc_pd(&ctx->pd);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_alloc_pd_err;
     }
 
     /* Create a Completion Queue */
     memset(&ctx->cq, 0, sizeof(struct cq_ctx));
     ctx->cq.ibdev               = ctx->dev.ibdev;
-    ctx->cq.comp_handler        = responder_cq_comp_handler,
+    ctx->cq.comp_handler        = cq_comp_handler,
     ctx->cq.event_handler       = NULL,
     ctx->cq.context             = NULL,
 
@@ -85,6 +67,7 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->cq.init_attr.flags         = 0,
     ret = verbs_create_cq(&ctx->cq);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_create_cq_err;
     }
 
@@ -107,10 +90,16 @@ int responder_receive_request(struct responder_ctx *ctx)
 	ctx->qp1.init_attr.cap.max_inline_data  = 0;
     ret = verbs_create_qp(&ctx->qp1);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_create_qp_err;
     }
 
-    
+    /* Get DMA Memory Region */
+    // mr.ibpd = pd.ibpd;
+    // ret = verbs_alloc_mr(&mr);
+    // if (ret) {
+    //     goto get_mr_err;
+    // }
 
     /* Transition Queue Pair to Initalize state */
     ctx->qp1.attr.qp_state          = IB_QPS_INIT;
@@ -126,6 +115,7 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->qp1.attr_mask |= IB_QP_PORT;
     ret = verbs_modify_qp(&ctx->qp1);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_modify_qp_err;
     }
 
@@ -141,8 +131,8 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->qp1.attr.ah_attr.static_rate   = 1;    // 
     ctx->qp1.attr.ah_attr.type          = RDMA_AH_ATTR_TYPE_UNDEFINED;
     ctx->qp1.attr.ah_attr.port_num      = ctx->dev.port_num;
-    ctx->qp1.attr.ah_attr.ah_flags      = 0; // Required by dis
-    // ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
+    // ctx->qp1.attr.ah_attr.ah_flags      = 0; // Required by dis
+    ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
 
     ctx->qp1.attr.ah_attr.grh.hop_limit     = 1;
     ctx->qp1.attr.ah_attr.grh.sgid_index    = 1; 
@@ -157,6 +147,7 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->qp1.attr_mask |= IB_QP_MIN_RNR_TIMER;
     ret = verbs_modify_qp(&ctx->qp1);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_modify_qp_err;
     }
 
@@ -176,6 +167,7 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->qp1.attr_mask |= IB_QP_MAX_QP_RD_ATOMIC;
     ret = verbs_modify_qp(&ctx->qp1);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_modify_qp_err;
     }
 
@@ -188,22 +180,43 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->rqe.ibbadwr    = NULL;
 
     ctx->rqe.ibwr.num_sge       = 1; // Number of segments to receive
-    ctx->rqe.ibwr.wr_id         = 1;
+    ctx->rqe.ibwr.wr_id         = 1; // Work Request ID
     ctx->rqe.ibwr.next          = NULL;
+    ctx->rqe.ibwr.sg_list       = ctx->rqe.ibsge;
     
-    /* Create Segment List */
-    ctx->sge[0].addr    = (uintptr_t)message;
-    ctx->sge[0].length  = DIS_MAX_MSG_LEN;
-    ctx->sge[0].lkey    = 1234;
-    ret = responder_create_sg_list(ctx->sge, &ctx->rqe);
-    if (ret) {
-        goto responder_create_sg_list_err;
-    }
+    memset(ctx->rqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
+    ctx->rqe.ibsge[0].addr      = (uintptr_t)recv_message;
+    ctx->rqe.ibsge[0].length    = DIS_MAX_MSG_LEN;
+    ctx->rqe.ibsge[0].lkey      = 123;
 
     /* Post Receive Queue Element */
     ret = verbs_post_recv(&ctx->rqe);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_post_recv_err;
+    }
+
+    /* Create Send Queue Element */
+    memset(&ctx->sqe, 0, sizeof(struct sqe_ctx));
+    ctx->sqe.ibqp       = ctx->qp1.ibqp;
+    ctx->sqe.ibbadwr    = NULL;
+
+	ctx->sqe.ibwr.opcode        = IB_WR_SEND;
+	ctx->sqe.ibwr.send_flags    = IB_SEND_SIGNALED;
+	ctx->sqe.ibwr.wr_id         = 2; // Work Request ID
+    ctx->sqe.ibwr.num_sge       = 1; // Number of segments to send
+    ctx->sqe.ibwr.sg_list       = ctx->sqe.ibsge;
+    
+    memset(ctx->sqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
+    ctx->sqe.ibsge[0].addr      = (uintptr_t)send_message;
+    ctx->sqe.ibsge[0].length    = strlen(send_message);
+    ctx->sqe.ibsge[0].lkey      = 456;
+
+    /* Post Send Queue Element */
+    ret = verbs_post_send(&ctx->sqe);
+    if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
+        goto verbs_post_send_err;
     }
 
     /* Poll Completion Queue */
@@ -212,24 +225,21 @@ int responder_receive_request(struct responder_ctx *ctx)
     ctx->cqe.num_entries    = DIS_MAX_CQE;
     ret = verbs_poll_cq(&ctx->cqe, 1);
     if (ret < 0) {
+        pr_devel(DIS_STATUS_FAIL);
         goto verbs_poll_cq_err;
     }
 
-    pr_info("Responder Work Completions: %d", ret);
-
     /* Print Result Of Transmission */
+    pr_info("Responder Work Completions: %d", ret);
     for(i = 0; i < ret; i++) {
         pr_info("Responder received transmission %d with status: %s",
                 i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
     }
 
 verbs_poll_cq_err:
+verbs_post_send_err:
 verbs_post_recv_err:
-    kfree(ctx->rqe.ibwr.sg_list);
-    pr_devel("kfree(ibwr.sg_list): " DIS_STATUS_COMPLETE);
-
 verbs_modify_qp_err:
-responder_create_sg_list_err:
     ib_destroy_qp(ctx->qp1.ibqp);
     pr_devel("ib_destroy_qp(ctx->qp1): " DIS_STATUS_COMPLETE);
 
@@ -242,25 +252,24 @@ verbs_create_cq_err:
     pr_devel("ib_dealloc_pd: " DIS_STATUS_COMPLETE);
 
 verbs_alloc_pd_err:
+verbs_query_port_err:
     pr_devel(DIS_STATUS_COMPLETE);
-    return 0;
+    return ret;
 }
 
-int responder_test(struct ib_device *ibdev)
+int send_receive_program(struct ib_device *ibdev)
 {
     int ret;
-    struct responder_ctx ctx;
+    struct send_receive_ctx ctx;
     pr_devel(DIS_STATUS_START);
 
-    /* Query Device Port */
-    ctx.dev.ibdev       = ibdev;
-    ctx.dev.port_num    = 1;
-    ret = verbs_query_port(&ctx.dev);
-    if (ret) {
-        return 0;
+    memset(&ctx.dev, 0, sizeof(struct dev_ctx));
+    ctx.dev.ibdev = ibdev;
+    ret = send_receive(&ctx);
+    if(ret) {
+        pr_devel(DIS_STATUS_FAIL);
+        return -42;
     }
-
-    ret = responder_receive_request(&ctx);
 
     pr_devel(DIS_STATUS_COMPLETE);
     return 0;

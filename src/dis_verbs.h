@@ -55,23 +55,18 @@ struct qp_ctx {
 //     struct ib_pd    *ibpd;
 // };
 
-struct sge_ctx {
-    struct ib_sge   *ibsge;
-	u64	            addr;
-	u32	            length;
-	u32	            lkey;
-};
-
 struct sqe_ctx {
     struct ib_qp            *ibqp;
     struct ib_send_wr       ibwr;
     const struct ib_send_wr *ibbadwr;
+    struct ib_sge           ibsge[DIS_MAX_SGE];
 };
 
 struct rqe_ctx {
     struct ib_qp            *ibqp;
     struct ib_recv_wr       ibwr;
     const struct ib_recv_wr *ibbadwr;
+    struct ib_sge           ibsge[DIS_MAX_SGE];
 };
 
 struct cqe_ctx {
@@ -80,22 +75,13 @@ struct cqe_ctx {
     struct ib_wc    ibwc[DIS_MAX_CQE];
 };
 
-struct requester_ctx {
+struct send_receive_ctx {
     struct dev_ctx      dev;
     struct pd_ctx       pd;
     struct cq_ctx       cq;
     struct qp_ctx       qp1;
-    struct sge_ctx      sge[DIS_MAX_SGE];
+    // struct sge_ctx      sge[DIS_MAX_SGE];
     struct sqe_ctx      sqe;
-    struct cqe_ctx      cqe;
-};
-
-struct responder_ctx {
-    struct dev_ctx      dev;
-    struct pd_ctx       pd;
-    struct cq_ctx       cq;
-    struct qp_ctx       qp1;
-    struct sge_ctx      sge[DIS_MAX_SGE];
     struct rqe_ctx      rqe;
     struct cqe_ctx      cqe;
 };
@@ -110,7 +96,6 @@ int verbs_post_recv(struct rqe_ctx *rqe);
 int verbs_poll_cq(struct cqe_ctx *cqe, int retry_max);
 
 // int verbs_alloc_mr(struct mr_ctx *mr);
-
 // int responder_get_gid_attr(struct gid_ctx *gid);
 
 #endif /* __DIS_VERBS_H__ */

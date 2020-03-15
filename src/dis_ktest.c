@@ -5,27 +5,21 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 
-#include "dis_requester.h"
-#include "dis_responder.h"
+#include "dis_send_receive.h"
 
 MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
 MODULE_LICENSE("GPL");
 
-static bool is_responder = true;
+// static bool is_responder = true;
 
-module_param(is_responder, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+// module_param(is_responder, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
 static void dis_ktest_add(struct ib_device *ibdev)
 {
-    int ret;
     pr_devel(DIS_STATUS_START);
 
-    if(is_responder) {
-        ret = responder_test(ibdev);
-    } else {
-        ret = requester_test(ibdev);
-    }
+    send_receive_program(ibdev);
 
     pr_devel(DIS_STATUS_COMPLETE);
 }
