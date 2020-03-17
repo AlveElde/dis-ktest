@@ -80,7 +80,6 @@ struct send_receive_ctx {
     struct pd_ctx       pd;
     struct cq_ctx       cq;
     struct qp_ctx       qp1;
-    // struct sge_ctx      sge[DIS_MAX_SGE];
     struct sqe_ctx      sqe;
     struct rqe_ctx      rqe;
     struct cqe_ctx      cqe;

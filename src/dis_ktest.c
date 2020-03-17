@@ -6,34 +6,40 @@
 #include <linux/kernel.h>
 
 #include "dis_send_receive.h"
+#include "dis_verbs.h"
 
 MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
 MODULE_LICENSE("GPL");
 
-// static bool is_responder = true;
+static void dis_ktest_add(struct ib_device *ibdev);
+static void dis_ktest_remove(struct ib_device *ib_device, void *client_data);
 
-// module_param(is_responder, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+static struct send_receive_ctx ctx;
+static struct ib_client disibclient = {
+	.name   = "dis-ktest",
+    .add    = dis_ktest_add,
+	.remove = dis_ktest_remove,
+};
 
 static void dis_ktest_add(struct ib_device *ibdev)
 {
     pr_devel(DIS_STATUS_START);
 
-    send_receive_program(ibdev);
+    memset(&ctx, 0, sizeof(struct send_receive_ctx));
+    ctx.dev.ibdev = ibdev;
+    send_receive_init(&ctx);
+    ib_set_client_data(ibdev, &disibclient, (void *)&ctx);
 
     pr_devel(DIS_STATUS_COMPLETE);
 }
 
 static void dis_ktest_remove(struct ib_device *ib_device, void *client_data)
 {
+    pr_devel(DIS_STATUS_START);
+    
     pr_devel(DIS_STATUS_COMPLETE);
 }
-
-static struct ib_client disibclient = {
-	.name   = "dis-ktest",
-    .add    = dis_ktest_add,
-	.remove = dis_ktest_remove,
-};
 
 static int __init dis_ktest_init(void)
 {

@@ -30,7 +30,7 @@ void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
     return;
 }
 
-int send_receive(struct send_receive_ctx *ctx)
+int send_receive_init(struct send_receive_ctx *ctx)
 {
     int ret, i;
     char send_message[DIS_MAX_MSG_LEN] = "Hello There!\n";
@@ -46,7 +46,7 @@ int send_receive(struct send_receive_ctx *ctx)
     }
 
     /* Create Protection Domain */
-    memset(&ctx->pd, 0, sizeof(struct pd_ctx));
+    // memset(&ctx->pd, 0, sizeof(struct pd_ctx));
     ctx->pd.ibdev = ctx->dev.ibdev;
     ctx->pd.flags = 0;
     ret = verbs_alloc_pd(&ctx->pd);
@@ -56,7 +56,7 @@ int send_receive(struct send_receive_ctx *ctx)
     }
 
     /* Create a Completion Queue */
-    memset(&ctx->cq, 0, sizeof(struct cq_ctx));
+    // memset(&ctx->cq, 0, sizeof(struct cq_ctx));
     ctx->cq.ibdev               = ctx->dev.ibdev;
     ctx->cq.comp_handler        = cq_comp_handler,
     ctx->cq.event_handler       = NULL,
@@ -72,7 +72,7 @@ int send_receive(struct send_receive_ctx *ctx)
     }
 
     /* Create Queue Pair 1*/
-    memset(&ctx->qp1, 0, sizeof(struct qp_ctx));
+    // memset(&ctx->qp1, 0, sizeof(struct qp_ctx));
     ctx->qp1.ibpd = ctx->pd.ibpd;
 
     ctx->qp1.init_attr.qp_context   = NULL;
@@ -122,7 +122,7 @@ int send_receive(struct send_receive_ctx *ctx)
     /* Transition Queue Pair to Ready To Receive state */
     ctx->qp1.attr.qp_state              = IB_QPS_RTR;
     ctx->qp1.attr.path_mtu              = IB_MTU_4096;
-    ctx->qp1.attr.dest_qp_num           = 1;    // Dest QPN
+    ctx->qp1.attr.dest_qp_num           = 10;    // Dest QPN
     ctx->qp1.attr.rq_psn                = 10;   // RQ Packet Sequence Number
     ctx->qp1.attr.max_dest_rd_atomic    = 1;    // Responder Resources for RDMA read/atomic ops
     ctx->qp1.attr.min_rnr_timer         = 1;    // Minimum RNR NAK
@@ -131,8 +131,8 @@ int send_receive(struct send_receive_ctx *ctx)
     ctx->qp1.attr.ah_attr.static_rate   = 1;    // 
     ctx->qp1.attr.ah_attr.type          = RDMA_AH_ATTR_TYPE_UNDEFINED;
     ctx->qp1.attr.ah_attr.port_num      = ctx->dev.port_num;
-    // ctx->qp1.attr.ah_attr.ah_flags      = 0; // Required by dis
-    ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
+    ctx->qp1.attr.ah_attr.ah_flags      = 0; // Required by dis
+    // ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
 
     ctx->qp1.attr.ah_attr.grh.hop_limit     = 1;
     ctx->qp1.attr.ah_attr.grh.sgid_index    = 1; 
@@ -171,11 +171,13 @@ int send_receive(struct send_receive_ctx *ctx)
         goto verbs_modify_qp_err;
     }
 
+    goto verbs_modify_qp_err;
+
     /* Set up connection to requester */
     //TODO: Set up socket based exchange of GID
 
     /* Create Receive Queue Element */
-    memset(&ctx->rqe, 0, sizeof(struct rqe_ctx));
+    // memset(&ctx->rqe, 0, sizeof(struct rqe_ctx));
     ctx->rqe.ibqp       = ctx->qp1.ibqp;
     ctx->rqe.ibbadwr    = NULL;
 
@@ -184,7 +186,7 @@ int send_receive(struct send_receive_ctx *ctx)
     ctx->rqe.ibwr.next          = NULL;
     ctx->rqe.ibwr.sg_list       = ctx->rqe.ibsge;
     
-    memset(ctx->rqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
+    // memset(ctx->rqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
     ctx->rqe.ibsge[0].addr      = (uintptr_t)recv_message;
     ctx->rqe.ibsge[0].length    = DIS_MAX_MSG_LEN;
     ctx->rqe.ibsge[0].lkey      = 123;
@@ -197,7 +199,7 @@ int send_receive(struct send_receive_ctx *ctx)
     }
 
     /* Create Send Queue Element */
-    memset(&ctx->sqe, 0, sizeof(struct sqe_ctx));
+    // memset(&ctx->sqe, 0, sizeof(struct sqe_ctx));
     ctx->sqe.ibqp       = ctx->qp1.ibqp;
     ctx->sqe.ibbadwr    = NULL;
 
@@ -207,7 +209,7 @@ int send_receive(struct send_receive_ctx *ctx)
     ctx->sqe.ibwr.num_sge       = 1; // Number of segments to send
     ctx->sqe.ibwr.sg_list       = ctx->sqe.ibsge;
     
-    memset(ctx->sqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
+    // memset(ctx->sqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
     ctx->sqe.ibsge[0].addr      = (uintptr_t)send_message;
     ctx->sqe.ibsge[0].length    = strlen(send_message);
     ctx->sqe.ibsge[0].lkey      = 456;
@@ -220,7 +222,7 @@ int send_receive(struct send_receive_ctx *ctx)
     }
 
     /* Poll Completion Queue */
-    memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
+    // memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
     ret = verbs_poll_cq(&ctx->cqe, 1);
@@ -257,20 +259,7 @@ verbs_query_port_err:
     return ret;
 }
 
-int send_receive_program(struct ib_device *ibdev)
+void send_receive_exit(struct send_receive_ctx *ctx) 
 {
-    int ret;
-    struct send_receive_ctx ctx;
-    pr_devel(DIS_STATUS_START);
 
-    memset(&ctx.dev, 0, sizeof(struct dev_ctx));
-    ctx.dev.ibdev = ibdev;
-    ret = send_receive(&ctx);
-    if(ret) {
-        pr_devel(DIS_STATUS_FAIL);
-        return -42;
-    }
-
-    pr_devel(DIS_STATUS_COMPLETE);
-    return 0;
 }
