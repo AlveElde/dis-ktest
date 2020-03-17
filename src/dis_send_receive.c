@@ -42,21 +42,19 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ctx->dev.port_num    = 1;
     ret = verbs_query_port(&ctx->dev);
     if (ret) {
-        goto verbs_query_port_err;
+        return -42;
     }
 
     /* Create Protection Domain */
-    // memset(&ctx->pd, 0, sizeof(struct pd_ctx));
     ctx->pd.ibdev = ctx->dev.ibdev;
     ctx->pd.flags = 0;
     ret = verbs_alloc_pd(&ctx->pd);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_alloc_pd_err;
+        return -42;
     }
 
     /* Create a Completion Queue */
-    // memset(&ctx->cq, 0, sizeof(struct cq_ctx));
     ctx->cq.ibdev               = ctx->dev.ibdev;
     ctx->cq.comp_handler        = cq_comp_handler,
     ctx->cq.event_handler       = NULL,
@@ -68,11 +66,10 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_create_cq(&ctx->cq);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_create_cq_err;
+        return -42;
     }
 
     /* Create Queue Pair 1*/
-    // memset(&ctx->qp1, 0, sizeof(struct qp_ctx));
     ctx->qp1.ibpd = ctx->pd.ibpd;
 
     ctx->qp1.init_attr.qp_context   = NULL;
@@ -91,7 +88,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_create_qp(&ctx->qp1);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_create_qp_err;
+        return -42;
     }
 
     /* Get DMA Memory Region */
@@ -116,7 +113,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_modify_qp(&ctx->qp1);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_modify_qp_err;
+        return -42;
     }
 
     /* Transition Queue Pair to Ready To Receive state */
@@ -148,7 +145,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_modify_qp(&ctx->qp1);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_modify_qp_err;
+        return -42;
     }
 
     /* Transition Queue Pair to Ready To Send state */
@@ -168,16 +165,15 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_modify_qp(&ctx->qp1);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_modify_qp_err;
+        return -42;
     }
 
-    goto verbs_modify_qp_err;
+    return -42;
 
     /* Set up connection to requester */
     //TODO: Set up socket based exchange of GID
 
     /* Create Receive Queue Element */
-    // memset(&ctx->rqe, 0, sizeof(struct rqe_ctx));
     ctx->rqe.ibqp       = ctx->qp1.ibqp;
     ctx->rqe.ibbadwr    = NULL;
 
@@ -186,7 +182,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ctx->rqe.ibwr.next          = NULL;
     ctx->rqe.ibwr.sg_list       = ctx->rqe.ibsge;
     
-    // memset(ctx->rqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
     ctx->rqe.ibsge[0].addr      = (uintptr_t)recv_message;
     ctx->rqe.ibsge[0].length    = DIS_MAX_MSG_LEN;
     ctx->rqe.ibsge[0].lkey      = 123;
@@ -195,11 +190,10 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_post_recv(&ctx->rqe);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_post_recv_err;
+        return -42;
     }
 
     /* Create Send Queue Element */
-    // memset(&ctx->sqe, 0, sizeof(struct sqe_ctx));
     ctx->sqe.ibqp       = ctx->qp1.ibqp;
     ctx->sqe.ibbadwr    = NULL;
 
@@ -209,7 +203,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ctx->sqe.ibwr.num_sge       = 1; // Number of segments to send
     ctx->sqe.ibwr.sg_list       = ctx->sqe.ibsge;
     
-    // memset(ctx->sqe.ibsge, 0, sizeof(struct ib_sge) * DIS_MAX_SGE);
     ctx->sqe.ibsge[0].addr      = (uintptr_t)send_message;
     ctx->sqe.ibsge[0].length    = strlen(send_message);
     ctx->sqe.ibsge[0].lkey      = 456;
@@ -218,17 +211,16 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ret = verbs_post_send(&ctx->sqe);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_post_send_err;
+        return -42;
     }
 
     /* Poll Completion Queue */
-    // memset(&ctx->cqe, 0, sizeof(struct cqe_ctx));
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
     ret = verbs_poll_cq(&ctx->cqe, 1);
     if (ret < 0) {
         pr_devel(DIS_STATUS_FAIL);
-        goto verbs_poll_cq_err;
+        return -42;
     }
 
     /* Print Result Of Transmission */
@@ -238,28 +230,24 @@ int send_receive_init(struct send_receive_ctx *ctx)
                 i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
     }
 
-verbs_poll_cq_err:
-verbs_post_send_err:
-verbs_post_recv_err:
-verbs_modify_qp_err:
-    ib_destroy_qp(ctx->qp1.ibqp);
-    pr_devel("ib_destroy_qp(ctx->qp1): " DIS_STATUS_COMPLETE);
-
-verbs_create_qp_err:
-    ib_destroy_cq(ctx->cq.ibcq);
-    pr_devel("ib_destroy_cq: " DIS_STATUS_COMPLETE);
-
-verbs_create_cq_err:
-    ib_dealloc_pd(ctx->pd.ibpd);
-    pr_devel("ib_dealloc_pd: " DIS_STATUS_COMPLETE);
-
-verbs_alloc_pd_err:
-verbs_query_port_err:
     pr_devel(DIS_STATUS_COMPLETE);
-    return ret;
+    return 0;
 }
 
 void send_receive_exit(struct send_receive_ctx *ctx) 
 {
-
+    pr_devel(DIS_STATUS_START);
+    if (ctx->qp1.ibqp) {
+        ib_destroy_qp(ctx->qp1.ibqp);
+        pr_devel("ib_destroy_qp(ctx->qp1): " DIS_STATUS_COMPLETE);
+    }
+    if (ctx->cq.ibcq) {
+        ib_destroy_cq(ctx->cq.ibcq);
+        pr_devel("ib_destroy_cq: " DIS_STATUS_COMPLETE);
+    }
+    if (ctx->pd.ibpd) {
+        ib_dealloc_pd(ctx->pd.ibpd);
+        pr_devel("ib_dealloc_pd: " DIS_STATUS_COMPLETE);
+    }
+    pr_devel(DIS_STATUS_COMPLETE);
 }

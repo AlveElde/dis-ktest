@@ -37,6 +37,8 @@ static void dis_ktest_add(struct ib_device *ibdev)
 static void dis_ktest_remove(struct ib_device *ib_device, void *client_data)
 {
     pr_devel(DIS_STATUS_START);
+
+    send_receive_exit((struct send_receive_ctx*)client_data);
     
     pr_devel(DIS_STATUS_COMPLETE);
 }
