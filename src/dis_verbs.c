@@ -103,12 +103,11 @@ int verbs_poll_cq(struct cqe_ctx *cqe, int retry_max)
     int ret, i, cqe_count = 0;
     pr_devel(DIS_STATUS_START);
 
-    //TODO: Sleep if ret == 0?
     for(i = 0; i < retry_max; i++) {
         ret = ib_poll_cq(cqe->ibcq, cqe->num_entries, cqe->ibwc);
         if (ret < 0) {
             pr_devel(DIS_STATUS_FAIL);
-            return ret;
+            return -42;
         }
         cqe_count += ret;
 
@@ -117,11 +116,12 @@ int verbs_poll_cq(struct cqe_ctx *cqe, int retry_max)
         }
 
         if(i + 1 < retry_max) {
-            msleep(1000);
+            ssleep(1);
         }
     }
+
     pr_devel(DIS_STATUS_COMPLETE);
-    return ret;
+    return cqe_count;
 }
 
 // int verbs_alloc_mr(struct mr_ctx *mr)

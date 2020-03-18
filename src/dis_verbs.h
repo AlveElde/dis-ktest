@@ -9,7 +9,8 @@
 #define DIS_MAX_QP      1
 #define DIS_MAX_SGE     1
 #define DIS_MAX_SQE     1
-#define DIS_MAX_CQE     DIS_MAX_SQE
+#define DIS_MAX_RQE     1
+#define DIS_MAX_CQE     DIS_MAX_SQE + DIS_MAX_RQE
 #define DIS_MAX_MSG_LEN 128
 
 struct dev_ctx {

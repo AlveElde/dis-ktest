@@ -119,7 +119,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     /* Transition Queue Pair to Ready To Receive state */
     ctx->qp1.attr.qp_state              = IB_QPS_RTR;
     ctx->qp1.attr.path_mtu              = IB_MTU_4096;
-    ctx->qp1.attr.dest_qp_num           = 10;    // Dest QPN
+    ctx->qp1.attr.dest_qp_num           = 100;    // Dest QPN
     ctx->qp1.attr.rq_psn                = 10;   // RQ Packet Sequence Number
     ctx->qp1.attr.max_dest_rd_atomic    = 1;    // Responder Resources for RDMA read/atomic ops
     ctx->qp1.attr.min_rnr_timer         = 1;    // Minimum RNR NAK
@@ -132,7 +132,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     // ctx->qp1.attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
 
     ctx->qp1.attr.ah_attr.grh.hop_limit     = 1;
-    ctx->qp1.attr.ah_attr.grh.sgid_index    = 1; 
+    ctx->qp1.attr.ah_attr.grh.sgid_index    = 1;
     ctx->qp1.attr.ah_attr.grh.sgid_attr     = NULL;
 
     ctx->qp1.attr_mask = IB_QP_STATE;
@@ -168,8 +168,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
         return -42;
     }
 
-    return -42;
-
     /* Set up connection to requester */
     //TODO: Set up socket based exchange of GID
 
@@ -183,7 +181,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ctx->rqe.ibwr.sg_list       = ctx->rqe.ibsge;
     
     ctx->rqe.ibsge[0].addr      = (uintptr_t)recv_message;
-    ctx->rqe.ibsge[0].length    = DIS_MAX_MSG_LEN;
+    ctx->rqe.ibsge[0].length    = DIS_MAX_MSG_LEN * sizeof(char);
     ctx->rqe.ibsge[0].lkey      = 123;
 
     /* Post Receive Queue Element */
@@ -204,8 +202,10 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ctx->sqe.ibwr.sg_list       = ctx->sqe.ibsge;
     
     ctx->sqe.ibsge[0].addr      = (uintptr_t)send_message;
-    ctx->sqe.ibsge[0].length    = strlen(send_message);
+    ctx->sqe.ibsge[0].length    = DIS_MAX_MSG_LEN * sizeof(char);
     ctx->sqe.ibsge[0].lkey      = 456;
+
+    pr_info("Sending message: %s", (char*)(ctx->sqe.ibwr.sg_list[0].addr));
 
     /* Post Send Queue Element */
     ret = verbs_post_send(&ctx->sqe);
@@ -214,10 +214,13 @@ int send_receive_init(struct send_receive_ctx *ctx)
         return -42;
     }
 
+    // ssleep(30);
+    // return 0;
+
     /* Poll Completion Queue */
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
-    ret = verbs_poll_cq(&ctx->cqe, 1);
+    ret = verbs_poll_cq(&ctx->cqe, 30);
     if (ret < 0) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
@@ -227,7 +230,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     pr_info("Responder Work Completions: %d", ret);
     for(i = 0; i < ret; i++) {
         pr_info("Responder received transmission %d with status: %s",
-                i, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
+                i+1, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
     }
 
     pr_devel(DIS_STATUS_COMPLETE);

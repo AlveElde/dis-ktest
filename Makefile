@@ -4,7 +4,6 @@ SRC := ./src
 dis_ktest-objs := $(SRC)/dis_ktest.o  		\
 					$(SRC)/dis_verbs.o		\
 					$(SRC)/dis_send_receive.o	\
-					# $(SRC)/dis_requester.o  \
 					
 EXTRA_CFLAGS += -DDEBUG
 
@@ -14,12 +13,17 @@ all:
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 
-ins:
+# ins:
+# 	sudo dmesg -C
+# 	sudo insmod dis_ktest.ko
+# 	dmesg -t
+
+# rm:
+# 	sudo rmmod dis_ktest.ko
+# 	dmesg -t
+
+test:
 	sudo dmesg -C
 	sudo insmod dis_ktest.ko
-	dmesg -t
-
-rm:
-	sudo dmesg -C
 	sudo rmmod dis_ktest.ko
 	dmesg -t
