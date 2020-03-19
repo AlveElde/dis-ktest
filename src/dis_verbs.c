@@ -98,30 +98,34 @@ int verbs_post_recv(struct rqe_ctx *rqe)
     return 0;
 }
 
-int verbs_poll_cq(struct cqe_ctx *cqe, int retry_max)
+int verbs_poll_cq(struct cq_ctx *cq)
 {
-    int ret, i, cqe_count = 0;
+    int ret, sleep_ms_count;
     pr_devel(DIS_STATUS_START);
 
-    for(i = 0; i < retry_max; i++) {
-        ret = ib_poll_cq(cqe->ibcq, cqe->num_entries, cqe->ibwc);
+    sleep_ms_count = 0;
+    while(sleep_ms_count < DIS_POLL_TIMEOUT_MS) {
+        ret = ib_poll_cq(cq->ibcq,
+                            cq->expected_cqe - cq->cqe_c,
+                            &cq->cqe[cq->cqe_c]);
         if (ret < 0) {
             pr_devel(DIS_STATUS_FAIL);
             return -42;
         }
-        cqe_count += ret;
 
-        if(cqe_count >= cqe->num_entries) {
-            break;
+        cq->cqe_c += ret;
+
+        if(cq->cqe_c >= cq->expected_cqe) {
+            pr_devel(DIS_STATUS_COMPLETE);
+            return 0;
         }
 
-        if(i + 1 < retry_max) {
-            ssleep(1);
-        }
+        msleep(DIS_POLL_SLEEP_MS);
+        sleep_ms_count += DIS_POLL_SLEEP_MS;
     }
 
-    pr_devel(DIS_STATUS_COMPLETE);
-    return cqe_count;
+    pr_devel(DIS_STATUS_FAIL);
+    return -42;
 }
 
 // int verbs_alloc_mr(struct mr_ctx *mr)

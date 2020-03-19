@@ -12,6 +12,14 @@
 #define DIS_MAX_CQE     DIS_MAX_SQE + DIS_MAX_RQE
 #define DIS_MAX_MSG_LEN 128
 
+#define DIS_POLL_SLEEP_MS    200
+#define DIS_POLL_TIMEOUT_SEC 20
+#define DIS_POLL_TIMEOUT_MS  DIS_POLL_TIMEOUT_SEC * 1000
+
+struct buf_ctx {
+
+};
+
 struct dev_ctx {
     struct ib_device        *ibdev;
     struct ib_device_attr   dev_attr;
@@ -26,22 +34,68 @@ struct pd_ctx {
 };
 
 struct cq_ctx {
-    struct ib_cq        *ibcq;
-    struct ib_device    *ibdev;
+    struct ib_cq            *ibcq;
+    struct ib_device        *ibdev;
+    struct ib_cq_init_attr  init_attr;
+    struct ib_wc            cqe[DIS_MAX_CQE];
+    void                    *context;   
+    int                     expected_cqe;
+    int                     cqe_c;
     void (*comp_handler)(struct ib_cq *ibcq, void *cq_context);
     void (*event_handler)(struct ib_event *ibevent, void *cq_context);
-    void *context;
-    struct ib_cq_init_attr init_attr;
+};
+
+struct sqe_ctx {
+    struct ib_qp            *ibqp;
+    struct ib_send_wr       ibwr;
+    struct ib_sge           ibsge[DIS_MAX_SGE];
+    const struct ib_send_wr *ibbadwr;
+};
+
+struct rqe_ctx {
+    struct ib_qp            *ibqp;
+    struct ib_recv_wr       ibwr;
+    struct ib_sge           ibsge[DIS_MAX_SGE];
+    const struct ib_recv_wr *ibbadwr;
 };
 
 struct qp_ctx {
-    struct ib_qp            *ibqp;
-    struct ib_pd            *ibpd;
-    struct ib_qp_init_attr  init_attr;
-    struct ib_qp_attr       attr;
-    int                     attr_mask;
-    const struct ib_gid_attr      *gid_attr;
+    struct ib_qp                *ibqp;
+    struct ib_pd                *ibpd;
+    struct ib_qp_init_attr      init_attr;
+    struct ib_qp_attr           attr;
+    struct sqe_ctx              sqe[DIS_MAX_SQE];
+    struct rqe_ctx              rqe[DIS_MAX_RQE];
+    struct cq_ctx               *send_cq;
+    struct cq_ctx               *recv_cq;
+    const struct ib_gid_attr    *gid_attr;
+    int                         attr_mask;
+    int                         sqe_c;
+    int                         rqe_c;
 };
+
+struct send_receive_ctx {
+    struct dev_ctx  dev;
+    struct pd_ctx   pd[DIS_MAX_PD];
+    struct cq_ctx   cq[DIS_MAX_CQ];
+    struct qp_ctx   qp[DIS_MAX_QP];
+
+    int pd_c;
+    int cq_c;
+    int qp_c;
+};
+
+int verbs_query_port(struct dev_ctx *dev);
+int verbs_alloc_pd(struct pd_ctx *pd);
+int verbs_create_cq(struct cq_ctx *cq);
+int verbs_create_qp(struct qp_ctx *qp);
+int verbs_modify_qp(struct qp_ctx *qp);
+int verbs_post_send(struct sqe_ctx *sqe);
+int verbs_post_recv(struct rqe_ctx *rqe);
+int verbs_poll_cq(struct cq_ctx *cqe);
+
+// int verbs_alloc_mr(struct mr_ctx *mr);
+// int responder_get_gid_attr(struct gid_ctx *gid);
 
 // struct gid_ctx {
 //     const struct ib_gid_attr  *gid_attr;
@@ -54,47 +108,5 @@ struct qp_ctx {
 //     struct ib_mr    *ibmr;
 //     struct ib_pd    *ibpd;
 // };
-
-struct sqe_ctx {
-    struct ib_qp            *ibqp;
-    struct ib_send_wr       ibwr;
-    const struct ib_send_wr *ibbadwr;
-    struct ib_sge           ibsge[DIS_MAX_SGE];
-};
-
-struct rqe_ctx {
-    struct ib_qp            *ibqp;
-    struct ib_recv_wr       ibwr;
-    const struct ib_recv_wr *ibbadwr;
-    struct ib_sge           ibsge[DIS_MAX_SGE];
-};
-
-struct cqe_ctx {
-    struct ib_cq    *ibcq;
-    int             num_entries;
-    struct ib_wc    ibwc[DIS_MAX_CQE];
-};
-
-struct send_receive_ctx {
-    struct dev_ctx      dev;
-    struct pd_ctx       pd;
-    struct cq_ctx       cq;
-    struct qp_ctx       qp1;
-    struct sqe_ctx      sqe;
-    struct rqe_ctx      rqe;
-    struct cqe_ctx      cqe;
-};
-
-int verbs_query_port(struct dev_ctx *dev);
-int verbs_alloc_pd(struct pd_ctx *pd);
-int verbs_create_cq(struct cq_ctx *cq);
-int verbs_create_qp(struct qp_ctx *qp);
-int verbs_modify_qp(struct qp_ctx *qp);
-int verbs_post_send(struct sqe_ctx *sqe);
-int verbs_post_recv(struct rqe_ctx *rqe);
-int verbs_poll_cq(struct cqe_ctx *cqe, int retry_max);
-
-// int verbs_alloc_mr(struct mr_ctx *mr);
-// int responder_get_gid_attr(struct gid_ctx *gid);
 
 #endif /* __DIS_VERBS_H__ */
