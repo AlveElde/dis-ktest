@@ -214,13 +214,10 @@ int send_receive_init(struct send_receive_ctx *ctx)
         return -42;
     }
 
-    // ssleep(30);
-    // return 0;
-
     /* Poll Completion Queue */
     ctx->cqe.ibcq           = ctx->cq.ibcq;
     ctx->cqe.num_entries    = DIS_MAX_CQE;
-    ret = verbs_poll_cq(&ctx->cqe, 30);
+    ret = verbs_poll_cq(&ctx->cqe, 20);
     if (ret < 0) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
@@ -229,8 +226,22 @@ int send_receive_init(struct send_receive_ctx *ctx)
     /* Print Result Of Transmission */
     pr_info("Responder Work Completions: %d", ret);
     for(i = 0; i < ret; i++) {
-        pr_info("Responder received transmission %d with status: %s",
-                i+1, ib_wc_status_msg(ctx->cqe.ibwc[i].status));
+        switch (ctx->cqe.ibwc[i].opcode)
+        {
+        case IB_WC_SEND:
+            pr_info("CQE num: %d, Opcode: IB_WC_SEND, status: %s, message: %s",
+                    i, ib_wc_status_msg(ctx->cqe.ibwc[i].status), send_message);
+            break;
+        
+        case IB_WC_RECV:
+            pr_info("CQE num: %d, Opcode: IB_WC_RECV, status: %s, message: %s",
+                    i, ib_wc_status_msg(ctx->cqe.ibwc[i].status), recv_message);
+            break;
+        default:
+            pr_info("CQE num: %d, Opcode: Unknown", i);
+            break;
+        }
+        
     }
 
     pr_devel(DIS_STATUS_COMPLETE);

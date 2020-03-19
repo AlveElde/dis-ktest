@@ -13,15 +13,6 @@ all:
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 
-# ins:
-# 	sudo dmesg -C
-# 	sudo insmod dis_ktest.ko
-# 	dmesg -t
-
-# rm:
-# 	sudo rmmod dis_ktest.ko
-# 	dmesg -t
-
 test:
 	sudo dmesg -C
 	sudo insmod dis_ktest.ko
