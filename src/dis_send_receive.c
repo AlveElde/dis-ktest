@@ -25,28 +25,33 @@ int create_socket(void)
 //     return 0;
 // }
 
-// void print_cqe(struct cq_ctx *cq)
-// {
-//     /* Print Result Of Transmission */
-//     pr_info("Responder Work Completions: %d", ret);
-//     for(i = 0; i < cq->cqe_c; i++) {
-//         switch (cq->cqe[i].opcode)
-//         {
-//         case IB_WC_SEND:
-//             pr_info("CQE num: %d, Opcode: IB_WC_SEND, status: %s, message: %s",
-//                     i, ib_wc_status_msg(cq->cqe[i].status), send_message);
-//             break;
+void print_cqe(struct cq_ctx *cq)
+{
+    int i;
+    struct ib_wc *cqe;
+    pr_devel(DIS_STATUS_START);
+
+    /* Print Result Of Transmission */
+    for(i = 0; i < cq->cqe_c; i++) {
+        cqe = &cq->cqe[i];
+        switch (cqe->opcode)
+        {
+        case IB_WC_SEND:
+            pr_info("CQE num: %d, Opcode: IB_WC_SEND, status: %s, wr_id: %d",
+                    i, ib_wc_status_msg(cqe->status), (int)cqe->wr_id);
+            break;
         
-//         case IB_WC_RECV:
-//             pr_info("CQE num: %d, Opcode: IB_WC_RECV, status: %s, message: %s",
-//                     i, ib_wc_status_msg(cq->cqe[i].status), recv_message);
-//             break;
-//         default:
-//             pr_info("CQE num: %d, Opcode: Unknown", i);
-//             break;
-//         }
-//     }
-// }
+        case IB_WC_RECV:
+            pr_info("CQE num: %d, Opcode: IB_WC_RECV, status: %s, wr_id: %d",
+                    i, ib_wc_status_msg(cqe->status), (int)cqe->wr_id);
+            break;
+        default:
+            pr_info("CQE num: %d, Opcode: Unknown", i);
+            break;
+        }
+    }
+    pr_devel(DIS_STATUS_COMPLETE);
+}
 
 void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 {
@@ -56,17 +61,13 @@ void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 int send_receive_init(struct send_receive_ctx *ctx)
 {
     int ret;
-    //  int ret, pd_i, cq_i, qp_i, rqe_i, sqe_i, cqe_i;
     struct pd_ctx *pd;
     struct cq_ctx *cq;
     struct qp_ctx *qp;
     struct rqe_ctx *rqe;
     struct sqe_ctx *sqe;
-    char send_message[DIS_MAX_MSG_LEN] = "Hello There!\n";
-    char recv_message[DIS_MAX_MSG_LEN];
-    
+    struct sge_ctx *sge;
     pr_devel(DIS_STATUS_START);
-
 
     /* Query Device Port */
     ctx->dev.port_num    = 1;
@@ -76,7 +77,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     }
 
     /* Create Protection Domain */
-    // pd_i = ctx->pd_c;
     pd = &ctx->pd[ctx->pd_c];
     pd->ibdev = ctx->dev.ibdev;
     pd->flags = 0;
@@ -87,7 +87,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     }
 
     /* Create a Completion Queue */
-    // cq_i = ctx->cq_c;
     cq = &ctx->cq[ctx->cq_c];
     cq->ibdev            = ctx->dev.ibdev;
     cq->comp_handler     = cq_comp_handler,
@@ -105,7 +104,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     ctx->cq_c++;
 
     /* Create Queue Pair 1*/
-    // qp_i = ctx->qp_c;
     qp = &ctx->qp[ctx->qp_c];
     qp->ibpd    = ctx->pd[ctx->pd_c].ibpd;
     qp->send_cq = cq;
@@ -201,24 +199,29 @@ int send_receive_init(struct send_receive_ctx *ctx)
         return -42;
     }
     
-
     /* Set up connection to requester */
     //TODO: Set up socket based exchange of GID
 
+    /* Initialize Send/Receive Segment */
+    sge = &ctx->sge[ctx->sge_c];
+    strcpy(sge->send_sge, "Hello There!");
+    sge->length     = DIS_MAX_SGE_SIZE;
+    sge->lkey       = 123;
+    ctx->sge_c++;
+
     /* Create Receive Queue Element */
-    // rqe_i = ctx->rqe_c;
     rqe = &qp->rqe[qp->rqe_c];
     rqe->ibqp               = qp->ibqp;
     rqe->ibbadwr            = NULL;
 
     rqe->ibwr.num_sge       = 1; // Number of segments to receive
-    rqe->ibwr.wr_id         = 1; // Work Request ID
+    rqe->ibwr.wr_id         = qp->rqe_c; // Work Request ID
     rqe->ibwr.next          = NULL;
     rqe->ibwr.sg_list       = rqe->ibsge;
     
-    rqe->ibsge[0].addr      = (uintptr_t)recv_message;
-    rqe->ibsge[0].length    = DIS_MAX_MSG_LEN * sizeof(char);
-    rqe->ibsge[0].lkey      = 123;
+    rqe->ibsge[0].addr      = (uintptr_t)sge->recv_sge;
+    rqe->ibsge[0].length    = sge->length;
+    rqe->ibsge[0].lkey      = sge->lkey;
 
     /* Post Receive Queue Element */
     ret = verbs_post_recv(rqe);
@@ -230,22 +233,19 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->rqe_c++;
 
     /* Create Send Queue Element */
-    // sqe_i = qp->sqe_c;
     sqe = &qp->sqe[qp->sqe_c];
     sqe->ibqp               = qp->ibqp;
     sqe->ibbadwr            = NULL;
 
 	sqe->ibwr.opcode        = IB_WR_SEND;
 	sqe->ibwr.send_flags    = IB_SEND_SIGNALED;
-	sqe->ibwr.wr_id         = 2; // Work Request ID
-    sqe->ibwr.num_sge       = 1; // Number of segments to send
+    sqe->ibwr.num_sge       = 1;                // Number of segments to send
+	sqe->ibwr.wr_id         = qp->sqe_c;        // Work Request ID
     sqe->ibwr.sg_list       = sqe->ibsge;
     
-    sqe->ibsge[0].addr      = (uintptr_t)send_message;
-    sqe->ibsge[0].length    = DIS_MAX_MSG_LEN * sizeof(char);
-    sqe->ibsge[0].lkey      = 456;
-
-    // pr_info("Sending message: %s", (char*)(sqe->ibwr.sg_list[0].addr));
+    sqe->ibsge[0].addr      = (uintptr_t)sge->send_sge;
+    sqe->ibsge[0].length    = sge->length;
+    sqe->ibsge[0].lkey      = sge->lkey;
 
     /* Post Send Queue Element */
     ret = verbs_post_send(sqe);
@@ -257,14 +257,12 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->sqe_c++;
 
     /* Poll Completion Queue */
-    // i = ctx->cqe_c;
-    // cqe = &cq->cqe[cq->cqe_c];
-    // cqe->ibcq = cq->ibcq;
     ret = verbs_poll_cq(cq);
     if (ret < 0) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
+    print_cqe(cq);
 
     pr_devel(DIS_STATUS_COMPLETE);
     return 0;
