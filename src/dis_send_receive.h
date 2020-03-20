@@ -3,7 +3,7 @@
 
 #include <rdma/ib_verbs.h>
 
-#include "dis_verbs.h"
+#include "dis_ktest.h"
 
 int send_receive_init(struct send_receive_ctx *ctx);
 void send_receive_exit(struct send_receive_ctx *ctx);

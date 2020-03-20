@@ -4,9 +4,9 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 
-#include "dis_verbs.h"
+#include "dis_ktest.h"
 
-//TODO: This file has become obselete, may be deleted
+//TODO: This file has become obselete, may be deleted.
 
 int verbs_query_port(struct dev_ctx *dev)
 {

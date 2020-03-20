@@ -5,7 +5,7 @@
 #include <linux/socket.h>
 
 #include "dis_send_receive.h"
-#include "dis_verbs.h"
+#include "dis_ktest.h"
 
 // int responder_get_gid_attr(struct gid_ctx *gid)
 // {
@@ -47,11 +47,6 @@ void print_cq(struct cq_ctx *cq)
     pr_devel(DIS_STATUS_COMPLETE);
 }
 
-void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
-{
-    return;
-}
-
 int send_receive_init(struct send_receive_ctx *ctx)
 {
     int ret, sleep_ms_count;
@@ -85,13 +80,14 @@ int send_receive_init(struct send_receive_ctx *ctx)
     /* Create a Completion Queue */
     cq = &ctx->cq[ctx->cq_c];
     cq->ibdev           = dev->ibdev;
-    cq->comp_handler    = cq_comp_handler,
+    cq->comp_handler    = NULL,
     cq->event_handler   = NULL,
     cq->context         = NULL,
 
     cq->init_attr.cqe           = 10,
     cq->init_attr.comp_vector   = 0,
     cq->init_attr.flags         = 0,
+
     cq->ibcq = ib_create_cq(cq->ibdev,
                                 cq->comp_handler,
                                 cq->event_handler,
@@ -122,6 +118,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
 	qp->init_attr.cap.max_send_sge      = 1;
 	qp->init_attr.cap.max_recv_sge      = 1;
 	qp->init_attr.cap.max_inline_data   = 0;
+
     qp->ibqp = ib_create_qp(qp->ibpd, &qp->init_attr);
     if (!qp->ibqp) {
         pr_devel(DIS_STATUS_FAIL);
@@ -141,13 +138,14 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->attr_mask |= IB_QP_ACCESS_FLAGS;
     qp->attr_mask |= IB_QP_PKEY_INDEX;
     qp->attr_mask |= IB_QP_PORT;
+
     ret = ib_modify_qp(qp->ibqp, &qp->attr, qp->attr_mask);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
 
-    /* Transition Queue Pair to Ready To Receive state */
+    /* Transition Queue Pair to Ready To Receive(RTR) state */
     qp->attr.qp_state               = IB_QPS_RTR;
     qp->attr.path_mtu               = IB_MTU_4096;
     qp->attr.dest_qp_num            = 100;
@@ -173,13 +171,14 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->attr_mask |= IB_QP_RQ_PSN;
     qp->attr_mask |= IB_QP_MAX_DEST_RD_ATOMIC;
     qp->attr_mask |= IB_QP_MIN_RNR_TIMER;
+
     ret = ib_modify_qp(qp->ibqp, &qp->attr, qp->attr_mask);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
 
-    /* Transition Queue Pair to Ready To Send state */
+    /* Transition Queue Pair to Ready To Send(RTS) state */
     qp->attr.qp_state       = IB_QPS_RTS;
     qp->attr.timeout        = 10;
     qp->attr.retry_cnt      = 10;
@@ -193,6 +192,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->attr_mask |= IB_QP_RNR_RETRY;
     qp->attr_mask |= IB_QP_SQ_PSN;
     qp->attr_mask |= IB_QP_MAX_QP_RD_ATOMIC;
+
     ret = ib_modify_qp(qp->ibqp, &qp->attr, qp->attr_mask);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
@@ -204,12 +204,12 @@ int send_receive_init(struct send_receive_ctx *ctx)
 
     /* Initialize Send/Receive Segment */
     sge = &ctx->sge[ctx->sge_c];
-    strcpy(sge->send_sge, "Hello There!");
+    strncpy(sge->send_sge, "Hello There!", DIS_MAX_SGE_SIZE);
     sge->length     = DIS_MAX_SGE_SIZE;
     sge->lkey       = 123;
     ctx->sge_c++;
 
-    /* Create Receive Queue Element */
+    /* Post Receive Queue Element */
     rqe = &qp->rqe[qp->rqe_c];
     rqe->ibqp               = qp->ibqp;
     rqe->ibbadwr            = NULL;
@@ -223,7 +223,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     rqe->ibsge[0].length    = sge->length;
     rqe->ibsge[0].lkey      = sge->lkey;
 
-    /* Post Receive Queue Element */
     ret = ib_post_recv(rqe->ibqp, &rqe->ibwr, &rqe->ibbadwr);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
@@ -232,7 +231,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->recv_cq->expected_cqe++;
     qp->rqe_c++;
 
-    /* Create Send Queue Element */
+    /* Post Send Queue Element */
     sqe = &qp->sqe[qp->sqe_c];
     sqe->ibqp               = qp->ibqp;
     sqe->ibbadwr            = NULL;
@@ -247,7 +246,6 @@ int send_receive_init(struct send_receive_ctx *ctx)
     sqe->ibsge[0].length    = sge->length;
     sqe->ibsge[0].lkey      = sge->lkey;
 
-    /* Post Send Queue Element */
     ret = ib_post_send(sqe->ibqp, &sqe->ibwr, &sqe->ibbadwr);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
@@ -276,6 +274,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
         sleep_ms_count += DIS_POLL_SLEEP_MS;
     }
 
+    /* Print results */
     print_cq(cq);
     pr_devel("Received message: %s", sge->recv_sge);
 

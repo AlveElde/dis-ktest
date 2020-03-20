@@ -6,7 +6,7 @@
 #include <linux/kernel.h>
 
 #include "dis_send_receive.h"
-#include "dis_verbs.h"
+#include "dis_ktest.h"
 
 MODULE_DESCRIPTION("Testing facilities for the dis-kverbs module");
 MODULE_AUTHOR("Alve Elde");
