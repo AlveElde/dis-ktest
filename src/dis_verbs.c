@@ -6,6 +6,8 @@
 
 #include "dis_verbs.h"
 
+//TODO: This file has become obselete, may be deleted
+
 int verbs_query_port(struct dev_ctx *dev)
 {
     int ret;

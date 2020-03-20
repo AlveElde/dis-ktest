@@ -1,9 +1,9 @@
 obj-m += dis_ktest.o
 
 SRC := ./src
-dis_ktest-objs := $(SRC)/dis_ktest.o  		\
-					$(SRC)/dis_verbs.o		\
+dis_ktest-objs := $(SRC)/dis_ktest.o  			\
 					$(SRC)/dis_send_receive.o	\
+					# $(SRC)/dis_verbs.o		\
 					
 EXTRA_CFLAGS += -DDEBUG
 

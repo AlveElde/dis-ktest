@@ -93,14 +93,14 @@ struct send_receive_ctx {
     int sge_c;
 };
 
-int verbs_query_port(struct dev_ctx *dev);
-int verbs_alloc_pd(struct pd_ctx *pd);
-int verbs_create_cq(struct cq_ctx *cq);
-int verbs_create_qp(struct qp_ctx *qp);
-int verbs_modify_qp(struct qp_ctx *qp);
-int verbs_post_send(struct sqe_ctx *sqe);
-int verbs_post_recv(struct rqe_ctx *rqe);
-int verbs_poll_cq(struct cq_ctx *cqe);
+// int verbs_query_port(struct dev_ctx *dev);
+// int verbs_alloc_pd(struct pd_ctx *pd);
+// int verbs_create_cq(struct cq_ctx *cq);
+// int verbs_create_qp(struct qp_ctx *qp);
+// int verbs_modify_qp(struct qp_ctx *qp);
+// int verbs_post_send(struct sqe_ctx *sqe);
+// int verbs_post_recv(struct rqe_ctx *rqe);
+// int verbs_poll_cq(struct cq_ctx *cqe);
 
 // int verbs_alloc_mr(struct mr_ctx *mr);
 // int responder_get_gid_attr(struct gid_ctx *gid);

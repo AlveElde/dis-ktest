@@ -7,12 +7,6 @@
 #include "dis_send_receive.h"
 #include "dis_verbs.h"
 
-int create_socket(void)
-{  
-    //struct socket *sock = NULL;
-    return 0;
-}
-
 // int responder_get_gid_attr(struct gid_ctx *gid)
 // {
 //     pr_devel(DIS_STATUS_START);
@@ -25,7 +19,7 @@ int create_socket(void)
 //     return 0;
 // }
 
-void print_cqe(struct cq_ctx *cq)
+void print_cq(struct cq_ctx *cq)
 {
     int i;
     struct ib_wc *cqe;
@@ -60,7 +54,8 @@ void cq_comp_handler(struct ib_cq *ibcq, void *cq_context)
 
 int send_receive_init(struct send_receive_ctx *ctx)
 {
-    int ret;
+    int ret, sleep_ms_count;
+    struct dev_ctx *dev;
     struct pd_ctx *pd;
     struct cq_ctx *cq;
     struct qp_ctx *qp;
@@ -70,34 +65,39 @@ int send_receive_init(struct send_receive_ctx *ctx)
     pr_devel(DIS_STATUS_START);
 
     /* Query Device Port */
-    ctx->dev.port_num    = 1;
-    ret = verbs_query_port(&ctx->dev);
+    dev = &ctx->dev;
+    dev->port_num    = 1;
+    ret = ib_query_port(dev->ibdev, dev->port_num, &dev->port_attr);
     if (ret) {
         return -42;
     }
 
     /* Create Protection Domain */
     pd = &ctx->pd[ctx->pd_c];
-    pd->ibdev = ctx->dev.ibdev;
+    pd->ibdev = dev->ibdev;
     pd->flags = 0;
-    ret = verbs_alloc_pd(pd);
-    if (ret) {
+    pd->ibpd = ib_alloc_pd(pd->ibdev, pd->flags);
+    if (!pd->ibpd) {
         pr_devel(DIS_STATUS_FAIL);
-        return -42;
+		return -42;
     }
 
     /* Create a Completion Queue */
     cq = &ctx->cq[ctx->cq_c];
-    cq->ibdev            = ctx->dev.ibdev;
-    cq->comp_handler     = cq_comp_handler,
-    cq->event_handler    = NULL,
-    cq->context          = NULL,
+    cq->ibdev           = dev->ibdev;
+    cq->comp_handler    = cq_comp_handler,
+    cq->event_handler   = NULL,
+    cq->context         = NULL,
 
-    cq->init_attr.cqe            = 10,
-    cq->init_attr.comp_vector    = 0,
-    cq->init_attr.flags          = 0,
-    ret = verbs_create_cq(cq);
-    if (ret) {
+    cq->init_attr.cqe           = 10,
+    cq->init_attr.comp_vector   = 0,
+    cq->init_attr.flags         = 0,
+    cq->ibcq = ib_create_cq(cq->ibdev,
+                                cq->comp_handler,
+                                cq->event_handler,
+                                cq->context,
+                                &cq->init_attr);
+    if (!cq->ibcq) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
@@ -109,62 +109,62 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->send_cq = cq;
     qp->recv_cq = cq;
 
-    qp->init_attr.qp_context     = NULL;
-    qp->init_attr.send_cq        = cq->ibcq;
-    qp->init_attr.recv_cq        = cq->ibcq;
-    qp->init_attr.srq            = NULL;
-    qp->init_attr.sq_sig_type    = IB_SIGNAL_ALL_WR;
-    qp->init_attr.qp_type        = IB_QPT_RC;
-    qp->init_attr.create_flags   = 0;
+    qp->init_attr.qp_context    = NULL;
+    qp->init_attr.send_cq       = cq->ibcq;
+    qp->init_attr.recv_cq       = cq->ibcq;
+    qp->init_attr.srq           = NULL;
+    qp->init_attr.sq_sig_type   = IB_SIGNAL_ALL_WR;
+    qp->init_attr.qp_type       = IB_QPT_RC;
+    qp->init_attr.create_flags  = 0;
 
-    qp->init_attr.cap.max_send_wr        = 10;
-    qp->init_attr.cap.max_recv_wr        = 10;
-	qp->init_attr.cap.max_send_sge       = 1;
-	qp->init_attr.cap.max_recv_sge       = 1;
-	qp->init_attr.cap.max_inline_data    = 0;
-    ret = verbs_create_qp(qp);
-    if (ret) {
+    qp->init_attr.cap.max_send_wr       = 10;
+    qp->init_attr.cap.max_recv_wr       = 10;
+	qp->init_attr.cap.max_send_sge      = 1;
+	qp->init_attr.cap.max_recv_sge      = 1;
+	qp->init_attr.cap.max_inline_data   = 0;
+    qp->ibqp = ib_create_qp(qp->ibpd, &qp->init_attr);
+    if (!qp->ibqp) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
     ctx->qp_c++;
 
     /* Transition Queue Pair to Initalize state */
-    qp->attr.qp_state        = IB_QPS_INIT;
-    qp->attr.qp_access_flags = IB_ACCESS_REMOTE_WRITE;
-    qp->attr.qp_access_flags |= IB_ACCESS_REMOTE_READ;
-    qp->attr.qp_access_flags |= IB_ACCESS_LOCAL_WRITE;
-    qp->attr.pkey_index      = 0;
-    qp->attr.port_num        = ctx->dev.port_num;
+    qp->attr.qp_state           = IB_QPS_INIT;
+    qp->attr.qp_access_flags    = IB_ACCESS_REMOTE_WRITE;
+    qp->attr.qp_access_flags    |= IB_ACCESS_REMOTE_READ;
+    qp->attr.qp_access_flags    |= IB_ACCESS_LOCAL_WRITE;
+    qp->attr.pkey_index         = 0;
+    qp->attr.port_num           = dev->port_num;
 
     qp->attr_mask = IB_QP_STATE;
     qp->attr_mask |= IB_QP_ACCESS_FLAGS;
     qp->attr_mask |= IB_QP_PKEY_INDEX;
     qp->attr_mask |= IB_QP_PORT;
-    ret = verbs_modify_qp(qp);
+    ret = ib_modify_qp(qp->ibqp, &qp->attr, qp->attr_mask);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
 
     /* Transition Queue Pair to Ready To Receive state */
-    qp->attr.qp_state            = IB_QPS_RTR;
-    qp->attr.path_mtu            = IB_MTU_4096;
-    qp->attr.dest_qp_num         = 100;    // Dest QPN
-    qp->attr.rq_psn              = 10;   // RQ Packet Sequence Number
-    qp->attr.max_dest_rd_atomic  = 1;    // Responder Resources for RDMA read/atomic ops
-    qp->attr.min_rnr_timer       = 1;    // Minimum RNR NAK
+    qp->attr.qp_state               = IB_QPS_RTR;
+    qp->attr.path_mtu               = IB_MTU_4096;
+    qp->attr.dest_qp_num            = 100;
+    qp->attr.rq_psn                 = 10;
+    qp->attr.max_dest_rd_atomic     = 1;
+    qp->attr.min_rnr_timer          = 1;
 
-    qp->attr.ah_attr.sl          = 0;    // Service Level
-    qp->attr.ah_attr.static_rate = 1;    // 
-    qp->attr.ah_attr.type        = RDMA_AH_ATTR_TYPE_UNDEFINED;
-    qp->attr.ah_attr.port_num    = ctx->dev.port_num;
-    qp->attr.ah_attr.ah_flags    = 0; // Required by dis
+    qp->attr.ah_attr.sl             = 0;
+    qp->attr.ah_attr.static_rate    = 1;
+    qp->attr.ah_attr.type           = RDMA_AH_ATTR_TYPE_UNDEFINED;
+    qp->attr.ah_attr.port_num       = dev->port_num;
+    qp->attr.ah_attr.ah_flags       = 0; // Required by dis
     // qp->attr.ah_attr.ah_flags      = IB_AH_GRH; // Required by rxe
 
-    qp->attr.ah_attr.grh.hop_limit   = 1;
-    qp->attr.ah_attr.grh.sgid_index  = 1;
-    qp->attr.ah_attr.grh.sgid_attr   = NULL;
+    qp->attr.ah_attr.grh.hop_limit  = 1;
+    qp->attr.ah_attr.grh.sgid_index = 1;
+    qp->attr.ah_attr.grh.sgid_attr  = NULL;
 
     qp->attr_mask = IB_QP_STATE;
     qp->attr_mask |= IB_QP_AV;
@@ -173,19 +173,19 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->attr_mask |= IB_QP_RQ_PSN;
     qp->attr_mask |= IB_QP_MAX_DEST_RD_ATOMIC;
     qp->attr_mask |= IB_QP_MIN_RNR_TIMER;
-    ret = verbs_modify_qp(qp);
+    ret = ib_modify_qp(qp->ibqp, &qp->attr, qp->attr_mask);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
 
     /* Transition Queue Pair to Ready To Send state */
-    qp->attr.qp_state        = IB_QPS_RTS;
-    qp->attr.timeout         = 10;   // Local ACK Timeout
-    qp->attr.retry_cnt       = 10;   // Retry count 
-    qp->attr.rnr_retry       = 10;   // RNR retry count
-    qp->attr.sq_psn          = 10;   // SQ Packet Sequence Number
-    qp->attr.max_rd_atomic   = 1;    // Number of Outstanding RDMA Read/atomic ops at destination.
+    qp->attr.qp_state       = IB_QPS_RTS;
+    qp->attr.timeout        = 10;
+    qp->attr.retry_cnt      = 10;
+    qp->attr.rnr_retry      = 10;
+    qp->attr.sq_psn         = 10;
+    qp->attr.max_rd_atomic  = 1;
 
     qp->attr_mask = IB_QP_STATE;
     qp->attr_mask |= IB_QP_TIMEOUT;
@@ -193,7 +193,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->attr_mask |= IB_QP_RNR_RETRY;
     qp->attr_mask |= IB_QP_SQ_PSN;
     qp->attr_mask |= IB_QP_MAX_QP_RD_ATOMIC;
-    ret = verbs_modify_qp(qp);
+    ret = ib_modify_qp(qp->ibqp, &qp->attr, qp->attr_mask);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
@@ -214,8 +214,8 @@ int send_receive_init(struct send_receive_ctx *ctx)
     rqe->ibqp               = qp->ibqp;
     rqe->ibbadwr            = NULL;
 
-    rqe->ibwr.num_sge       = 1; // Number of segments to receive
-    rqe->ibwr.wr_id         = qp->rqe_c; // Work Request ID
+    rqe->ibwr.num_sge       = 1;
+    rqe->ibwr.wr_id         = qp->rqe_c;
     rqe->ibwr.next          = NULL;
     rqe->ibwr.sg_list       = rqe->ibsge;
     
@@ -224,7 +224,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     rqe->ibsge[0].lkey      = sge->lkey;
 
     /* Post Receive Queue Element */
-    ret = verbs_post_recv(rqe);
+    ret = ib_post_recv(rqe->ibqp, &rqe->ibwr, &rqe->ibbadwr);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
@@ -239,8 +239,8 @@ int send_receive_init(struct send_receive_ctx *ctx)
 
 	sqe->ibwr.opcode        = IB_WR_SEND;
 	sqe->ibwr.send_flags    = IB_SEND_SIGNALED;
-    sqe->ibwr.num_sge       = 1;                // Number of segments to send
-	sqe->ibwr.wr_id         = qp->sqe_c;        // Work Request ID
+    sqe->ibwr.num_sge       = 1;
+	sqe->ibwr.wr_id         = qp->sqe_c;
     sqe->ibwr.sg_list       = sqe->ibsge;
     
     sqe->ibsge[0].addr      = (uintptr_t)sge->send_sge;
@@ -248,7 +248,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     sqe->ibsge[0].lkey      = sge->lkey;
 
     /* Post Send Queue Element */
-    ret = verbs_post_send(sqe);
+    ret = ib_post_send(sqe->ibqp, &sqe->ibwr, &sqe->ibbadwr);
     if (ret) {
         pr_devel(DIS_STATUS_FAIL);
         return -42;
@@ -257,12 +257,27 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->sqe_c++;
 
     /* Poll Completion Queue */
-    ret = verbs_poll_cq(cq);
-    if (ret < 0) {
-        pr_devel(DIS_STATUS_FAIL);
-        return -42;
+    sleep_ms_count = 0;
+    while(sleep_ms_count < DIS_POLL_TIMEOUT_MS) {
+        ret = ib_poll_cq(cq->ibcq,
+                            cq->expected_cqe - cq->cqe_c,
+                            &cq->cqe[cq->cqe_c]);
+        if (ret < 0) {
+            pr_devel(DIS_STATUS_FAIL);
+            return -42;
+        }
+
+        cq->cqe_c += ret;
+        if(cq->cqe_c >= cq->expected_cqe) {
+           break;
+        }
+
+        msleep(DIS_POLL_SLEEP_MS);
+        sleep_ms_count += DIS_POLL_SLEEP_MS;
     }
-    print_cqe(cq);
+
+    print_cq(cq);
+    pr_devel("Received message: %s", sge->recv_sge);
 
     pr_devel(DIS_STATUS_COMPLETE);
     return 0;
