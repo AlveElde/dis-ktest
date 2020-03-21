@@ -6,14 +6,14 @@
 #define DIS_MAX_PD      1
 #define DIS_MAX_CQ      1
 #define DIS_MAX_QP      1
-#define DIS_MAX_SGE     1
+#define DIS_MAX_SGE     2
 #define DIS_MAX_SQE     1
 #define DIS_MAX_RQE     1
 #define DIS_MAX_CQE     DIS_MAX_SQE + DIS_MAX_RQE
 #define DIS_MAX_SGE_SIZE 128
 
 #define DIS_POLL_SLEEP_MS    200
-#define DIS_POLL_TIMEOUT_SEC 30
+#define DIS_POLL_TIMEOUT_SEC 20
 #define DIS_POLL_TIMEOUT_MS  DIS_POLL_TIMEOUT_SEC * 1000
 
 
@@ -53,7 +53,6 @@ struct sqe_ctx {
 struct rqe_ctx {
     struct ib_qp            *ibqp;
     struct ib_recv_wr       ibwr;
-
     struct ib_sge           ibsge[DIS_MAX_SGE];
     const struct ib_recv_wr *ibbadwr;
 };
@@ -86,11 +85,10 @@ struct send_receive_ctx {
     struct cq_ctx   cq[DIS_MAX_CQ];
     struct qp_ctx   qp[DIS_MAX_QP];
     struct sge_ctx  sge[DIS_MAX_SGE];
-
-    int pd_c;
-    int cq_c;
-    int qp_c;
-    int sge_c;
+    int             pd_c;
+    int             cq_c;
+    int             qp_c;
+    int             sge_c;
 };
 
 // int verbs_query_port(struct dev_ctx *dev);

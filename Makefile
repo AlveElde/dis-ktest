@@ -13,8 +13,21 @@ all:
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 
-test:
+dmesg-c: 
 	sudo dmesg -C
+
+test: dmesg-c
 	sudo insmod dis_ktest.ko
 	sudo rmmod dis_ktest.ko
+	dmesg -t
+
+ins-rxe:
+	sudo modprobe rdma_rxe
+	sudo bash -c "echo enp1s0 > /sys/module/rdma_rxe/parameters/add"
+
+rm-rxe:
+	sudo bash -c "echo rxe0 > /sys/module/rdma_rxe/parameters/remove"
+	sudo modprobe -r rdma_rxe
+
+rxe: dmesg-c ins-rxe test rm-rxe
 	dmesg -t

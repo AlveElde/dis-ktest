@@ -47,9 +47,14 @@ void print_cq(struct cq_ctx *cq)
     pr_devel(DIS_STATUS_COMPLETE);
 }
 
+void print_sge(struct sge_ctx *sge) {
+    pr_devel("Send message : %s", sge->send_sge);
+    pr_devel("Recv message : %s", sge->recv_sge);
+}
+
 int send_receive_init(struct send_receive_ctx *ctx)
 {
-    int ret, sleep_ms_count;
+    int i, ret, sleep_ms_count;
     struct dev_ctx *dev;
     struct pd_ctx *pd;
     struct cq_ctx *cq;
@@ -59,15 +64,16 @@ int send_receive_init(struct send_receive_ctx *ctx)
     struct sge_ctx *sge;
     pr_devel(DIS_STATUS_START);
 
-    /* Query Device Port */
+    pr_devel("Querying Device Port: %d", 1);
     dev = &ctx->dev;
-    dev->port_num    = 1;
+    dev->port_num = 1;
     ret = ib_query_port(dev->ibdev, dev->port_num, &dev->port_attr);
     if (ret) {
+        pr_devel(DIS_STATUS_FAIL);
         return -42;
     }
 
-    /* Create Protection Domain */
+    pr_devel("Creating Protection Domain: %d", ctx->pd_c);
     pd = &ctx->pd[ctx->pd_c];
     pd->ibdev = dev->ibdev;
     pd->flags = 0;
@@ -76,8 +82,9 @@ int send_receive_init(struct send_receive_ctx *ctx)
         pr_devel(DIS_STATUS_FAIL);
 		return -42;
     }
+    ctx->pd_c++;
 
-    /* Create a Completion Queue */
+    pr_devel("Creating Completion Queue: %d", ctx->cq_c);
     cq = &ctx->cq[ctx->cq_c];
     cq->ibdev           = dev->ibdev;
     cq->comp_handler    = NULL,
@@ -99,9 +106,9 @@ int send_receive_init(struct send_receive_ctx *ctx)
     }
     ctx->cq_c++;
 
-    /* Create Queue Pair 1*/
+    pr_devel("Creating Queue Pair: %d", ctx->qp_c);
     qp = &ctx->qp[ctx->qp_c];
-    qp->ibpd    = ctx->pd[ctx->pd_c].ibpd;
+    qp->ibpd    = pd->ibpd;
     qp->send_cq = cq;
     qp->recv_cq = cq;
 
@@ -126,7 +133,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     }
     ctx->qp_c++;
 
-    /* Transition Queue Pair to Initalize state */
+    pr_devel("Transitioning Queue Pair %d to INIT state", ctx->qp_c - 1);
     qp->attr.qp_state           = IB_QPS_INIT;
     qp->attr.qp_access_flags    = IB_ACCESS_REMOTE_WRITE;
     qp->attr.qp_access_flags    |= IB_ACCESS_REMOTE_READ;
@@ -145,7 +152,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
         return -42;
     }
 
-    /* Transition Queue Pair to Ready To Receive(RTR) state */
+    pr_devel("Transitioning Queue Pair %d to RTR state", ctx->qp_c - 1);
     qp->attr.qp_state               = IB_QPS_RTR;
     qp->attr.path_mtu               = IB_MTU_4096;
     qp->attr.dest_qp_num            = 100;
@@ -178,7 +185,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
         return -42;
     }
 
-    /* Transition Queue Pair to Ready To Send(RTS) state */
+    pr_devel("Transitioing Queue Pair %d to RTS state", ctx->qp_c - 1);
     qp->attr.qp_state       = IB_QPS_RTS;
     qp->attr.timeout        = 10;
     qp->attr.retry_cnt      = 10;
@@ -202,26 +209,37 @@ int send_receive_init(struct send_receive_ctx *ctx)
     /* Set up connection to requester */
     //TODO: Set up socket based exchange of GID
 
-    /* Initialize Send/Receive Segment */
+    /* Initialize Send/Receive Segments */
+    pr_devel("Initializing Send/Receive Segment: %d", ctx->sge_c);
     sge = &ctx->sge[ctx->sge_c];
     strncpy(sge->send_sge, "Hello There!", DIS_MAX_SGE_SIZE);
     sge->length     = DIS_MAX_SGE_SIZE;
     sge->lkey       = 123;
     ctx->sge_c++;
+    
+    pr_devel("Initializing Send/Receive Segment: %d", ctx->sge_c);
+    sge = &ctx->sge[ctx->sge_c];
+    strncpy(sge->send_sge, "Gerneral Kenobi", DIS_MAX_SGE_SIZE);
+    sge->length     = DIS_MAX_SGE_SIZE;
+    sge->lkey       = 456;
+    ctx->sge_c++;
 
     /* Post Receive Queue Element */
+    pr_devel("Posting Receive Queue Element: %d", qp->rqe_c);
     rqe = &qp->rqe[qp->rqe_c];
     rqe->ibqp               = qp->ibqp;
     rqe->ibbadwr            = NULL;
 
-    rqe->ibwr.num_sge       = 1;
+    rqe->ibwr.num_sge       = ctx->sge_c;
     rqe->ibwr.wr_id         = qp->rqe_c;
     rqe->ibwr.next          = NULL;
     rqe->ibwr.sg_list       = rqe->ibsge;
     
-    rqe->ibsge[0].addr      = (uintptr_t)sge->recv_sge;
-    rqe->ibsge[0].length    = sge->length;
-    rqe->ibsge[0].lkey      = sge->lkey;
+    for (i = 0; i < ctx->sge_c; i++) {
+        rqe->ibsge[i].addr      = (uintptr_t)ctx->sge[i].recv_sge;
+        rqe->ibsge[i].length    = ctx->sge[i].length;
+        rqe->ibsge[i].lkey      = ctx->sge[i].lkey;
+    }
 
     ret = ib_post_recv(rqe->ibqp, &rqe->ibwr, &rqe->ibbadwr);
     if (ret) {
@@ -232,19 +250,22 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->rqe_c++;
 
     /* Post Send Queue Element */
+    pr_devel("Posting Send Queue Element: %d", qp->sqe_c);
     sqe = &qp->sqe[qp->sqe_c];
     sqe->ibqp               = qp->ibqp;
     sqe->ibbadwr            = NULL;
 
 	sqe->ibwr.opcode        = IB_WR_SEND;
 	sqe->ibwr.send_flags    = IB_SEND_SIGNALED;
-    sqe->ibwr.num_sge       = 1;
+    sqe->ibwr.num_sge       = ctx->sge_c;
 	sqe->ibwr.wr_id         = qp->sqe_c;
     sqe->ibwr.sg_list       = sqe->ibsge;
-    
-    sqe->ibsge[0].addr      = (uintptr_t)sge->send_sge;
-    sqe->ibsge[0].length    = sge->length;
-    sqe->ibsge[0].lkey      = sge->lkey;
+
+    for (i = 0; i < ctx->sge_c; i++) {
+        sqe->ibsge[i].addr      = (uintptr_t)ctx->sge[i].send_sge;
+        sqe->ibsge[i].length    = ctx->sge[i].length;
+        sqe->ibsge[i].lkey      = ctx->sge[i].lkey;
+    }
 
     ret = ib_post_send(sqe->ibqp, &sqe->ibwr, &sqe->ibbadwr);
     if (ret) {
@@ -255,6 +276,7 @@ int send_receive_init(struct send_receive_ctx *ctx)
     qp->sqe_c++;
 
     /* Poll Completion Queue */
+    pr_devel("Polling Completion Queue: %d", ctx->cq_c);
     sleep_ms_count = 0;
     while(sleep_ms_count < DIS_POLL_TIMEOUT_MS) {
         ret = ib_poll_cq(cq->ibcq,
@@ -275,8 +297,13 @@ int send_receive_init(struct send_receive_ctx *ctx)
     }
 
     /* Print results */
-    print_cq(cq);
-    pr_devel("Received message: %s", sge->recv_sge);
+    for (i = 0; i < ctx->cq_c; i++) {
+        print_cq(&ctx->cq[i]);
+    }
+
+    for (i = 0; i < ctx->sge_c; i++) {
+        print_sge(&ctx->sge[i]);
+    }
 
     pr_devel(DIS_STATUS_COMPLETE);
     return 0;
@@ -289,17 +316,17 @@ void send_receive_exit(struct send_receive_ctx *ctx)
 
     for (i = 0; i < ctx->qp_c; i++) {
         ib_destroy_qp(ctx->qp[i].ibqp);
-        pr_devel("ib_destroy_qp(ctx->qp[qp_i]): " DIS_STATUS_COMPLETE);
+        pr_devel("Destroy QP %d: " DIS_STATUS_COMPLETE, i);
     }
 
     for (i = 0; i < ctx->cq_c; i++) {
         ib_destroy_cq(ctx->cq[i].ibcq);
-        pr_devel("ib_destroy_cq: " DIS_STATUS_COMPLETE);
+        pr_devel("Destroy CQ %d: " DIS_STATUS_COMPLETE, i);
     }
 
     for (i = 0; i < ctx->pd_c; i++) {
         ib_dealloc_pd(ctx->pd[i].ibpd);
-        pr_devel("ib_dealloc_pd: " DIS_STATUS_COMPLETE);
+        pr_devel("Destroy PD %d: " DIS_STATUS_COMPLETE, i);
     }
     pr_devel(DIS_STATUS_COMPLETE);
 }
