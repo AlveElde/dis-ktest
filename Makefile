@@ -31,3 +31,9 @@ rm-rxe:
 
 rxe: dmesg-c ins-rxe test rm-rxe
 	dmesg -t
+
+record:
+	sudo trace-cmd record -p function_graph -l 'dis_qp_notify'
+
+report:
+	sudo trace-cmd report
